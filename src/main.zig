@@ -222,8 +222,6 @@ const TodoApp = struct {
 
     /// Draw our current state
     pub fn draw(self: *TodoApp) void {
-        const msg = "Hello, world!";
-
         // Window is a bounded area with a view to the screen. You cannot draw outside of a windows
         // bounds. They are light structures, not intended to be stored.
         const win = self.vx.window();
@@ -237,28 +235,6 @@ const TodoApp = struct {
         // be changing that as well
         self.vx.setMouseShape(.default);
 
-        const child = win.child(.{
-            .x_off = (win.width / 2) - 7,
-            .y_off = win.height / 2 + 1,
-            .width = .{ .limit = msg.len },
-            .height = .{ .limit = 1 },
-        });
-
-        // mouse events are much easier to handle in the draw cycle. Windows have a helper method to
-        // determine if the event occurred in the target window. This method returns null if there
-        // is no mouse event, or if it occurred outside of the window
-        const style: vaxis.Style = if (child.hasMouse(self.mouse)) |_| blk: {
-            // We handled the mouse event, so set it to null
-            self.mouse = null;
-            self.vx.setMouseShape(.pointer);
-            break :blk .{ .reverse = true };
-        } else .{};
-
-        // Print a text segment to the screen. This is a helper function which iterates over the
-        // text field for graphemes. Alternatively, you can implement your own print functions and
-        // use the writeCell API.
-        _ = try child.printSegment(.{ .text = msg, .style = style }, .{});
-
         var offset: usize = 5;
         for (self.tasks.items) |t| {
             const title = win.child(.{
@@ -267,7 +243,6 @@ const TodoApp = struct {
                 .width = .{ .limit = t.title.items.len },
                 .height = .{ .limit = 1 },
             });
-            _ = try title.printSegment(.{ .text = t.title.items, .style = style }, .{});
 
             const sep = win.child(.{
                 .x_off = 5 + t.title.items.len,
@@ -275,7 +250,6 @@ const TodoApp = struct {
                 .width = .{ .limit = t.title.items.len },
                 .height = .{ .limit = 1 },
             });
-            _ = try sep.printSegment(.{ .text = " - ", .style = style }, .{});
 
             const details = win.child(.{
                 .x_off = 5 + t.title.items.len + 3,
@@ -283,7 +257,41 @@ const TodoApp = struct {
                 .width = .{ .limit = t.details.items.len },
                 .height = .{ .limit = 1 },
             });
+
+            // mouse events are much easier to handle in the draw cycle. Windows have a helper method to
+            // determine if the event occurred in the target window. This method returns null if there
+            // is no mouse event, or if it occurred outside of the window
+            var style: vaxis.Style = if (title.hasMouse(self.mouse)) |_| blk: {
+                // We handled the mouse event, so set it to null
+                self.mouse = null;
+                self.vx.setMouseShape(.pointer);
+                break :blk .{ .reverse = true };
+            } else .{};
+
+            // mouse events are much easier to handle in the draw cycle. Windows have a helper method to
+            // determine if the event occurred in the target window. This method returns null if there
+            // is no mouse event, or if it occurred outside of the window
+            style = if (sep.hasMouse(self.mouse)) |_| blk: {
+                // We handled the mouse event, so set it to null
+                self.mouse = null;
+                self.vx.setMouseShape(.pointer);
+                break :blk .{ .reverse = true };
+            } else style;
+
+            // mouse events are much easier to handle in the draw cycle. Windows have a helper method to
+            // determine if the event occurred in the target window. This method returns null if there
+            // is no mouse event, or if it occurred outside of the window
+            style = if (details.hasMouse(self.mouse)) |_| blk: {
+                // We handled the mouse event, so set it to null
+                self.mouse = null;
+                self.vx.setMouseShape(.pointer);
+                break :blk .{ .reverse = true };
+            } else style;
+
+            _ = try title.printSegment(.{ .text = t.title.items, .style = style }, .{});
+            _ = try sep.printSegment(.{ .text = " - ", .style = style }, .{});
             _ = try details.printSegment(.{ .text = t.details.items, .style = style }, .{});
+
             offset += 1;
         }
     }
