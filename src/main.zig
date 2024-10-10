@@ -281,18 +281,6 @@ pub fn main() !void {
     }
     const allocator = gpa.allocator();
 
-    const todo_folder_name = "todo";
-    const data_path = known_folders.getPath(allocator, known_folders.KnownFolder.data) catch null;
-    defer if (data_path) |path| allocator.free(path);
-
-    const todo_folder_path = try std.fs.path.join(allocator, &.{ if (data_path) |p| p else "", todo_folder_name });
-    defer allocator.free(todo_folder_path);
-    const file_path = try std.fs.path.join(allocator, &.{ todo_folder_path, "test" });
-    defer allocator.free(file_path);
-    std.log.info("local_data: {?s}", .{data_path});
-    std.log.info("todo path: {s}", .{todo_folder_path});
-    std.log.info("file path: {s}", .{todo_folder_path});
-
     // Initialize our application
     var app = try TodoApp.init(allocator);
     defer app.deinit();
