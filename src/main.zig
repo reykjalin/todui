@@ -47,6 +47,8 @@ const Task = struct {
 /// The application state
 const TodoApp = struct {
     allocator: std.mem.Allocator,
+    // Arena allocator for easy event loops, see https://github.com/rockorager/libvaxis/blob/main/examples/table.zig#L110.
+    arena_allocator: std.heap.ArenaAllocator,
     // A flag for if we should quit
     should_quit: bool,
     /// The tty we are talking to
@@ -57,15 +59,26 @@ const TodoApp = struct {
     mouse: ?vaxis.Mouse,
     /// List of loaded tasks.
     tasks: std.ArrayList(Task),
+    /// Task table context.
+    task_table_ctx: vaxis.widgets.Table.TableContext,
 
     pub fn init(allocator: std.mem.Allocator) !TodoApp {
         return .{
             .allocator = allocator,
+            .arena_allocator = std.heap.ArenaAllocator.init(allocator),
             .should_quit = false,
             .tty = try vaxis.Tty.init(),
             .vx = try vaxis.init(allocator, .{}),
             .mouse = null,
             .tasks = std.ArrayList(Task).init(allocator),
+            .task_table_ctx = .{
+                .active = true,
+                .col = 0,
+                .row = 0,
+                .selected_bg = .{ .rgb = .{ 50, 50, 50 } },
+                .row_bg_1 = .{ .rgb = .{ 0, 0, 0 } },
+                .row_bg_2 = .{ .rgb = .{ 0, 0, 0 } },
+            },
         };
     }
 
@@ -75,6 +88,8 @@ const TodoApp = struct {
         // memory
         self.vx.deinit(self.allocator, self.tty.anyWriter());
         self.tty.deinit();
+
+        self.arena_allocator.deinit();
 
         // Cleanup the ArrayLists in the Task struct.
         for (self.tasks.items) |t| {
@@ -190,7 +205,7 @@ const TodoApp = struct {
                 try self.update(event);
             }
             // Draw our application after handling events
-            self.draw();
+            try self.draw();
 
             // It's best to use a buffered writer for the render method. TTY provides one, but you
             // may use your own. The provided bufferedWriter has a buffer size of 4096
@@ -213,6 +228,13 @@ const TodoApp = struct {
                 } else if (key.matches('q', .{})) {
                     self.should_quit = true;
                 }
+
+                if (key.matchesAny(&.{ vaxis.Key.up, 'k' }, .{})) {
+                    self.task_table_ctx.row -|= 1;
+                }
+                if (key.matchesAny(&.{ vaxis.Key.down, 'j' }, .{})) {
+                    self.task_table_ctx.row +|= 1;
+                }
             },
             .mouse => |mouse| self.mouse = mouse,
             .winsize => |ws| try self.vx.resize(self.allocator, self.tty.anyWriter(), ws),
@@ -221,7 +243,7 @@ const TodoApp = struct {
     }
 
     /// Draw our current state
-    pub fn draw(self: *TodoApp) void {
+    pub fn draw(self: *TodoApp) !void {
         // Window is a bounded area with a view to the screen. You cannot draw outside of a windows
         // bounds. They are light structures, not intended to be stored.
         const win = self.vx.window();
@@ -235,65 +257,15 @@ const TodoApp = struct {
         // be changing that as well
         self.vx.setMouseShape(.default);
 
-        var offset: usize = 5;
-        for (self.tasks.items) |t| {
-            const title = win.child(.{
-                .x_off = 5,
-                .y_off = offset,
-                .width = .{ .limit = t.title.items.len },
-                .height = .{ .limit = 1 },
-            });
+        const draw_table_allocator = self.arena_allocator.allocator();
 
-            const sep = win.child(.{
-                .x_off = 5 + t.title.items.len,
-                .y_off = offset,
-                .width = .{ .limit = t.title.items.len },
-                .height = .{ .limit = 1 },
-            });
+        var task_list = std.ArrayList(struct { title: []const u8 }).init(draw_table_allocator);
 
-            const details = win.child(.{
-                .x_off = 5 + t.title.items.len + 3,
-                .y_off = offset,
-                .width = .{ .limit = t.details.items.len },
-                .height = .{ .limit = 1 },
-            });
-
-            // mouse events are much easier to handle in the draw cycle. Windows have a helper method to
-            // determine if the event occurred in the target window. This method returns null if there
-            // is no mouse event, or if it occurred outside of the window
-            var style: vaxis.Style = if (title.hasMouse(self.mouse)) |_| blk: {
-                // We handled the mouse event, so set it to null
-                self.mouse = null;
-                self.vx.setMouseShape(.pointer);
-                break :blk .{ .reverse = true };
-            } else .{};
-
-            // mouse events are much easier to handle in the draw cycle. Windows have a helper method to
-            // determine if the event occurred in the target window. This method returns null if there
-            // is no mouse event, or if it occurred outside of the window
-            style = if (sep.hasMouse(self.mouse)) |_| blk: {
-                // We handled the mouse event, so set it to null
-                self.mouse = null;
-                self.vx.setMouseShape(.pointer);
-                break :blk .{ .reverse = true };
-            } else style;
-
-            // mouse events are much easier to handle in the draw cycle. Windows have a helper method to
-            // determine if the event occurred in the target window. This method returns null if there
-            // is no mouse event, or if it occurred outside of the window
-            style = if (details.hasMouse(self.mouse)) |_| blk: {
-                // We handled the mouse event, so set it to null
-                self.mouse = null;
-                self.vx.setMouseShape(.pointer);
-                break :blk .{ .reverse = true };
-            } else style;
-
-            _ = try title.printSegment(.{ .text = t.title.items, .style = style }, .{});
-            _ = try sep.printSegment(.{ .text = " - ", .style = style }, .{});
-            _ = try details.printSegment(.{ .text = t.details.items, .style = style }, .{});
-
-            offset += 1;
+        for (self.tasks.items) |task| {
+            try task_list.append(.{ .title = task.title.items });
         }
+
+        try vaxis.widgets.Table.drawTable(draw_table_allocator, self.vx.window(), &.{"Title"}, task_list, &self.task_table_ctx);
     }
 };
 
