@@ -106,7 +106,7 @@ const TodoApp = struct {
         const data_path = known_folders.getPath(self.allocator, known_folders.KnownFolder.data) catch null;
         defer if (data_path) |path| self.allocator.free(path);
 
-        const todo_folder_path = try std.fs.path.join(self.allocator, &[_][]const u8{ if (data_path) |p| p else "", todo_folder_name });
+        const todo_folder_path = try std.fs.path.join(self.allocator, &.{ if (data_path) |p| p else "", todo_folder_name });
         defer self.allocator.free(todo_folder_path);
 
         // FIXME: Handle file not found errors by creating the todo data folder.
@@ -126,7 +126,7 @@ const TodoApp = struct {
                 .details = std.ArrayList(u8).init(self.allocator),
             };
 
-            const file_path = try std.fs.path.join(self.allocator, &[_][]const u8{ todo_folder_path, f.name });
+            const file_path = try std.fs.path.join(self.allocator, &.{ todo_folder_path, f.name });
             defer self.allocator.free(file_path);
             const file = try std.fs.openFileAbsolute(file_path, .{});
             defer file.close();
@@ -285,9 +285,9 @@ pub fn main() !void {
     const data_path = known_folders.getPath(allocator, known_folders.KnownFolder.data) catch null;
     defer if (data_path) |path| allocator.free(path);
 
-    const todo_folder_path = try std.fs.path.join(allocator, &[_][]const u8{ if (data_path) |p| p else "", todo_folder_name });
+    const todo_folder_path = try std.fs.path.join(allocator, &.{ if (data_path) |p| p else "", todo_folder_name });
     defer allocator.free(todo_folder_path);
-    const file_path = try std.fs.path.join(allocator, &[_][]const u8{ todo_folder_path, "test" });
+    const file_path = try std.fs.path.join(allocator, &.{ todo_folder_path, "test" });
     defer allocator.free(file_path);
     std.log.info("local_data: {?s}", .{data_path});
     std.log.info("todo path: {s}", .{todo_folder_path});
