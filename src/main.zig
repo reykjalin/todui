@@ -45,7 +45,7 @@ const Task = struct {
     file_path: std.ArrayList(u8),
 };
 
-const Layout = union(enum) { TaskList, TaskDetails, CreateTask };
+const Layout = union(enum) { TaskList, TaskDetails };
 
 /// The application state
 const TodoApp = struct {
@@ -122,11 +122,7 @@ const TodoApp = struct {
     }
 
     fn load_tasks(self: *TodoApp) !void {
-        const todo_folder_name = "todo";
-        const data_path = known_folders.getPath(self.allocator, known_folders.KnownFolder.data) catch null;
-        defer if (data_path) |path| self.allocator.free(path);
-
-        const todo_folder_path = try std.fs.path.join(self.allocator, &.{ if (data_path) |p| p else "", todo_folder_name });
+        const todo_folder_path = try get_todo_file_storage_path_caller_should_free(self.allocator);
         defer self.allocator.free(todo_folder_path);
 
         // FIXME: Handle file not found errors by creating the todo data folder.
@@ -140,6 +136,8 @@ const TodoApp = struct {
                 std.log.info("tagname {s}", .{@tagName(f.kind)});
                 continue;
             }
+
+            // FIXME: only include .todo files.
             var task: Task = Task{
                 .title = std.ArrayList(u8).init(self.allocator),
                 .tags = std.ArrayList(u8).init(self.allocator),
@@ -289,7 +287,65 @@ const TodoApp = struct {
                         }
 
                         if (key.matches('n', .{})) {
-                            self.active_layout = .CreateTask;
+                            // Halt the loop.
+                            loop.stop();
+
+                            // Get the storage path.
+                            const storage_path = try get_todo_file_storage_path_caller_should_free(self.allocator);
+                            defer self.allocator.free(storage_path);
+
+                            // Get a handle to the storage directory.
+                            // FIXME: Create storage directory if it does not exist.
+                            const storage_dir = try std.fs.openDirAbsolute(storage_path, .{});
+
+                            // Store the number for the last file.
+                            // Default to 1 because that's what we want if there are no files stored.
+                            var last_file_number: []const u8 = "1";
+
+                            // Find the last file if it exists.
+                            var it = storage_dir.iterate();
+                            while (try it.next()) |f| {
+                                // We're only interested in files, not directories.
+                                if (f.kind != std.fs.Dir.Entry.Kind.file) {
+                                    continue;
+                                }
+
+                                // FIXME: only include .todo files.
+
+                                last_file_number = std.fs.path.stem(f.name);
+                            }
+
+                            // Parse the file number into an i32.
+                            const list_file_i32 = try std.fmt.parseInt(i32, last_file_number, 10);
+
+                            // Create the full file path for the new file.
+                            const new_file_name = try std.fmt.allocPrint(self.allocator, "{d}.todo", .{list_file_i32 + 1});
+                            defer self.allocator.free(new_file_name);
+
+                            const new_file_path = try std.fs.path.join(self.allocator, &.{ storage_path, new_file_name });
+                            defer self.allocator.free(new_file_path);
+
+                            // Get the executable environment.
+                            var env = try std.process.getEnvMap(self.allocator);
+                            defer env.deinit();
+
+                            // Use the $EDITOR environment variable if it's available; default to nano.
+                            const editor = env.get("EDITOR") orelse "nano";
+
+                            // Edit the todo file using $EDITOR.
+                            var child = std.process.Child.init(&.{ editor, new_file_path }, self.allocator);
+                            _ = try child.spawnAndWait();
+
+                            // Switch back to the task list layout.
+                            self.active_layout = .TaskList;
+
+                            // Restart the loop.
+                            try loop.start();
+                            try self.vx.enterAltScreen(self.tty.anyWriter());
+                            self.vx.queueRefresh();
+
+                            // Once new task is created, reload all the tasks.
+                            try self.reload_tasks();
                         }
                     },
                     .TaskDetails => {
@@ -337,17 +393,6 @@ const TodoApp = struct {
                             self.active_layout = .TaskList;
                         }
                     },
-                    .CreateTask => {
-                        if (key.matches(vaxis.Key.enter, .{})) {
-                            self.active_layout = .TaskList;
-
-                            // Once new task is created, reload all the tasks.
-                            try self.reload_tasks();
-                        }
-                        if (key.matches(vaxis.Key.escape, .{})) {
-                            self.active_layout = .TaskList;
-                        }
-                    },
                 }
             },
             .mouse => |mouse| self.mouse = mouse,
@@ -376,7 +421,6 @@ const TodoApp = struct {
         switch (self.active_layout) {
             .TaskList => try self.draw_task_list(),
             .TaskDetails => try self.draw_task_details(),
-            .CreateTask => try self.draw_create_task(),
         }
     }
 
@@ -436,22 +480,22 @@ const TodoApp = struct {
             unreachable;
         }
     }
-
-    fn draw_create_task(self: *TodoApp) !void {
-        try self.draw_task_list();
-
-        const win = self.vx.window();
-        const overlay = win.child(.{
-            .x_off = 2,
-            .y_off = 2,
-            .width = .{ .limit = win.width - 4 },
-            .height = .{ .limit = win.height - 4 },
-        });
-
-        const window = vaxis.widgets.border.all(overlay, .{});
-        window.clear();
-    }
 };
+
+fn get_todo_file_storage_path_caller_should_free(allocator: std.mem.Allocator) ![]const u8 {
+    const data_path = try known_folders.getPath(allocator, known_folders.KnownFolder.data);
+    defer {
+        if (data_path) |p| {
+            allocator.free(p);
+        }
+    }
+
+    if (data_path) |p| {
+        return try std.fs.path.join(allocator, &.{ p, "todo" });
+    }
+
+    unreachable;
+}
 
 /// Keep our main function small. Typically handling arg parsing and initialization only
 pub fn main() !void {
