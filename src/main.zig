@@ -281,7 +281,7 @@ const TodoApp = struct {
                             self.task_table_ctx.row +|= 1;
                         }
 
-                        if (key.matches(vaxis.Key.enter, .{})) {
+                        if (key.matchesAny(&.{ vaxis.Key.enter, 'l' }, .{})) {
                             self.active_layout = .TaskDetails;
                             self.active_task = self.tasks.items[self.task_table_ctx.row];
                         }
@@ -350,7 +350,7 @@ const TodoApp = struct {
                     },
                     .TaskDetails => {
                         if (self.active_task) |task| {
-                            if (key.matches(vaxis.Key.escape, .{})) {
+                            if (key.matchesAny(&.{ vaxis.Key.escape, 'h' }, .{})) {
                                 self.active_layout = .TaskList;
                                 self.active_task = null;
                             }
@@ -395,6 +395,7 @@ const TodoApp = struct {
                     },
                 }
             },
+            // FIXME: Add mouse interactions so you can click around the TUI.
             .mouse => |mouse| self.mouse = mouse,
             .winsize => |ws| try self.vx.resize(self.allocator, self.tty.anyWriter(), ws),
             else => {},
