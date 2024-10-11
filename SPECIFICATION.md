@@ -18,6 +18,17 @@ The `details` start on the fourth line and extend to the end of the file.
 The task details can contain any plain-text formatted text, including markup such as HTML, Markdown, or other.
 It is up to the implementation to decide how the details should be saved and rendered.
 
+## Example `.todo` file
+
+```
+Foo the bar
+foo,bar
+
+The foo must be barred properly.
+
+See specification at https://example.com.
+```
+
 
 ## Storage
 
