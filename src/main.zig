@@ -301,11 +301,19 @@ const TodoApp = struct {
                                 // Halt the loop.
                                 loop.stop();
 
+                                // Retain a copy of the file path for after the tasks are reloaded.
                                 const file_path_copy = try task.file_path.clone();
                                 defer file_path_copy.deinit();
 
-                                // Edit the file in Helix.
-                                var child = std.process.Child.init(&.{ "hx", task.file_path.items }, self.allocator);
+                                // Get the executable environment.
+                                var env = try std.process.getEnvMap(self.allocator);
+                                defer env.deinit();
+
+                                // Use the $EDITOR environment variable if it's available; default to nano.
+                                const editor = env.get("EDITOR") orelse "nano";
+
+                                // Edit the todo file using $EDITOR.
+                                var child = std.process.Child.init(&.{ editor, task.file_path.items }, self.allocator);
                                 _ = try child.spawnAndWait();
 
                                 // Restart the loop.
