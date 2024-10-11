@@ -1,6 +1,7 @@
 const std = @import("std");
 const vaxis = @import("vaxis");
 const known_folders = @import("known-folders");
+const gb = @import("gap_buffer");
 
 /// Set known folders to use XDG paths on macOS.
 pub const known_folders_config = .{
@@ -42,7 +43,10 @@ const Task = struct {
     title: std.ArrayList(u8),
     tags: std.ArrayList(TaskTag),
     details: std.ArrayList(u8),
+    file_path: std.ArrayList(u8),
 };
+
+const Layout = union(enum) { TaskList, TaskDetails, CreateTask };
 
 /// The application state
 const TodoApp = struct {
@@ -61,14 +65,24 @@ const TodoApp = struct {
     tasks: std.ArrayList(Task),
     /// Task table context.
     task_table_ctx: vaxis.widgets.Table.TableContext,
+    /// currently active layout.
+    active_layout: Layout,
+    /// Currently detailed task.
+    active_task: ?Task,
+    //== Task details ==//
+    /// The title input.
+    details_title_input: vaxis.widgets.TextInput,
+    /// The details input.
+    details_details_input: vaxis.widgets.TextInput,
 
     pub fn init(allocator: std.mem.Allocator) !TodoApp {
+        var vx = try vaxis.init(allocator, .{});
         return .{
             .allocator = allocator,
             .arena_allocator = std.heap.ArenaAllocator.init(allocator),
             .should_quit = false,
             .tty = try vaxis.Tty.init(),
-            .vx = try vaxis.init(allocator, .{}),
+            .vx = vx,
             .mouse = null,
             .tasks = std.ArrayList(Task).init(allocator),
             .task_table_ctx = .{
@@ -79,6 +93,10 @@ const TodoApp = struct {
                 .row_bg_1 = .{ .rgb = .{ 0, 0, 0 } },
                 .row_bg_2 = .{ .rgb = .{ 0, 0, 0 } },
             },
+            .active_layout = .TaskList,
+            .active_task = null,
+            .details_title_input = vaxis.widgets.TextInput.init(allocator, &vx.unicode),
+            .details_details_input = vaxis.widgets.TextInput.init(allocator, &vx.unicode),
         };
     }
 
@@ -89,15 +107,16 @@ const TodoApp = struct {
         self.vx.deinit(self.allocator, self.tty.anyWriter());
         self.tty.deinit();
 
+        // Free any memory used by the arena allocator.
         self.arena_allocator.deinit();
 
-        // Cleanup the ArrayLists in the Task struct.
-        for (self.tasks.items) |t| {
-            t.title.deinit();
-            t.tags.deinit();
-            t.details.deinit();
-        }
+        // Free any memory used by the text inputs.
+        self.details_title_input.deinit();
+        self.details_details_input.deinit();
 
+        // Make sure all the individual task structs are properly cleaned and freed before we
+        // free the main task list.
+        self.clear_tasks();
         self.tasks.deinit();
     }
 
@@ -124,9 +143,12 @@ const TodoApp = struct {
                 .title = std.ArrayList(u8).init(self.allocator),
                 .tags = std.ArrayList(TaskTag).init(self.allocator),
                 .details = std.ArrayList(u8).init(self.allocator),
+                .file_path = std.ArrayList(u8).init(self.allocator),
             };
 
             const file_path = try std.fs.path.join(self.allocator, &.{ todo_folder_path, f.name });
+            try task.file_path.appendSlice(file_path);
+
             defer self.allocator.free(file_path);
             const file = try std.fs.openFileAbsolute(file_path, .{});
             defer file.close();
@@ -149,6 +171,7 @@ const TodoApp = struct {
                     try task.title.appendSlice(line.items);
                 } else if (line_no > 3) {
                     try task.details.appendSlice(line.items);
+                    try task.details.appendSlice("\n");
                 }
             } else |err| switch (err) {
                 error.EndOfStream => { // end of file
@@ -165,6 +188,23 @@ const TodoApp = struct {
 
             try self.tasks.append(task);
         }
+    }
+
+    fn clear_tasks(self: *TodoApp) void {
+        // Cleanup the ArrayLists in the Task struct.
+        for (self.tasks.items) |t| {
+            t.title.deinit();
+            t.tags.deinit();
+            t.details.deinit();
+            t.file_path.deinit();
+        }
+
+        self.tasks.clearRetainingCapacity();
+    }
+
+    fn reload_tasks(self: *TodoApp) !void {
+        self.clear_tasks();
+        try self.load_tasks();
     }
 
     pub fn run(self: *TodoApp) !void {
@@ -202,7 +242,7 @@ const TodoApp = struct {
             loop.pollEvent();
             // tryEvent returns events until the queue is empty
             while (loop.tryEvent()) |event| {
-                try self.update(event);
+                try self.update(&loop, event);
             }
             // Draw our application after handling events
             try self.draw();
@@ -217,7 +257,7 @@ const TodoApp = struct {
     }
 
     /// Update our application state from an event
-    pub fn update(self: *TodoApp, event: Event) !void {
+    pub fn update(self: *TodoApp, loop: *vaxis.Loop(Event), event: Event) !void {
         switch (event) {
             .key_press => |key| {
                 // key.matches does some basic matching algorithms. Key matching can be complex in
@@ -229,17 +269,71 @@ const TodoApp = struct {
                     self.should_quit = true;
                 }
 
-                if (key.matchesAny(&.{ vaxis.Key.up, 'k' }, .{})) {
-                    self.task_table_ctx.row -|= 1;
-                }
-                if (key.matchesAny(&.{ vaxis.Key.down, 'j' }, .{})) {
-                    self.task_table_ctx.row +|= 1;
+                switch (self.active_layout) {
+                    .TaskList => {
+                        if (key.matchesAny(&.{ vaxis.Key.up, 'k' }, .{})) {
+                            self.task_table_ctx.row -|= 1;
+                        }
+                        if (key.matchesAny(&.{ vaxis.Key.down, 'j' }, .{})) {
+                            self.task_table_ctx.row +|= 1;
+                        }
+
+                        if (key.matches(vaxis.Key.enter, .{})) {
+                            self.active_layout = .TaskDetails;
+                            self.active_task = self.tasks.items[self.task_table_ctx.row];
+                        }
+
+                        if (key.matches('n', .{})) {
+                            self.active_layout = .CreateTask;
+                        }
+                    },
+                    .TaskDetails => {
+                        if (self.active_task) |task| {
+                            if (key.matches(vaxis.Key.escape, .{})) {
+                                self.active_layout = .TaskList;
+                                self.active_task = null;
+                            }
+
+                            if (key.matches('e', .{})) {
+                                // Halt the loop.
+                                loop.stop();
+
+                                // Edit the file in Helix.
+                                var child = std.process.Child.init(&.{ "hx", task.file_path.items }, self.allocator);
+                                _ = try child.spawnAndWait();
+
+                                // Restart the loop.
+                                try loop.start();
+                                try self.vx.enterAltScreen(self.tty.anyWriter());
+                                self.vx.queueRefresh();
+
+                                // Reload the tasks.
+                                // FIXME: there is a crash here.
+                                try self.reload_tasks();
+                            }
+                        } else {
+                            self.active_layout = .TaskList;
+                        }
+                    },
+                    .CreateTask => {
+                        if (key.matches(vaxis.Key.enter, .{})) {
+                            self.active_layout = .TaskList;
+
+                            // Once new task is created, reload all the tasks.
+                            try self.reload_tasks();
+                        }
+                        if (key.matches(vaxis.Key.escape, .{})) {
+                            self.active_layout = .TaskList;
+                        }
+                    },
                 }
             },
             .mouse => |mouse| self.mouse = mouse,
             .winsize => |ws| try self.vx.resize(self.allocator, self.tty.anyWriter(), ws),
             else => {},
         }
+
+        self.task_table_ctx.active = self.active_layout == .TaskList;
     }
 
     /// Draw our current state
@@ -257,6 +351,14 @@ const TodoApp = struct {
         // be changing that as well
         self.vx.setMouseShape(.default);
 
+        switch (self.active_layout) {
+            .TaskList => try self.draw_task_list(),
+            .TaskDetails => try self.draw_task_details(),
+            .CreateTask => try self.draw_create_task(),
+        }
+    }
+
+    fn draw_task_list(self: *TodoApp) !void {
         const draw_table_allocator = self.arena_allocator.allocator();
 
         var task_list = std.ArrayList(struct { title: []const u8 }).init(draw_table_allocator);
@@ -265,7 +367,59 @@ const TodoApp = struct {
             try task_list.append(.{ .title = task.title.items });
         }
 
-        try vaxis.widgets.Table.drawTable(draw_table_allocator, self.vx.window(), &.{"Title"}, task_list, &self.task_table_ctx);
+        const window = vaxis.widgets.border.all(self.vx.window(), .{});
+        try vaxis.widgets.Table.drawTable(draw_table_allocator, window, &.{"Tasks"}, task_list, &self.task_table_ctx);
+    }
+
+    fn draw_task_details(self: *TodoApp) !void {
+        if (self.active_task) |task| {
+            try self.draw_task_list();
+
+            const win = self.vx.window();
+            const overlay = win.child(.{
+                .x_off = 2,
+                .y_off = 2,
+                .width = .{ .limit = win.width - 4 },
+                .height = .{ .limit = win.height - 4 },
+            });
+
+            const window = vaxis.widgets.border.all(overlay, .{});
+            window.clear();
+
+            const title_input_box = window.child(.{
+                .x_off = 1,
+                .y_off = 0,
+                .width = .{ .limit = window.width - 2 },
+                .height = .{ .limit = 3 },
+            });
+
+            const details_input_box = window.child(.{
+                .x_off = 1,
+                .y_off = title_input_box.height,
+                .width = .{ .limit = window.width - 2 },
+                .height = .{ .limit = window.height - title_input_box.height },
+            });
+
+            _ = try vaxis.widgets.border.all(title_input_box, .{}).printSegment(.{ .text = task.title.items }, .{});
+            _ = try vaxis.widgets.border.all(details_input_box, .{}).printSegment(.{ .text = task.details.items }, .{});
+        } else {
+            unreachable;
+        }
+    }
+
+    fn draw_create_task(self: *TodoApp) !void {
+        try self.draw_task_list();
+
+        const win = self.vx.window();
+        const overlay = win.child(.{
+            .x_off = 2,
+            .y_off = 2,
+            .width = .{ .limit = win.width - 4 },
+            .height = .{ .limit = win.height - 4 },
+        });
+
+        const window = vaxis.widgets.border.all(overlay, .{});
+        window.clear();
     }
 };
 
