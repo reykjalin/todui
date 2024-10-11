@@ -1,6 +1,6 @@
 # Todo
 
-A TUI app for managing todo lists.
+A filesystem based TUI app for managing todo lists.
 The [`.todo` file specification](./SPECIFICATION.md) was created to fit this specific implementation.
 
 ## Build instructions
