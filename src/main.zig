@@ -274,10 +274,20 @@ const TodoApp = struct {
                 switch (self.active_layout) {
                     .TaskList => {
                         if (key.matchesAny(&.{ vaxis.Key.up, 'k' }, .{})) {
-                            self.task_table_ctx.row -|= 1;
+                            if (self.task_table_ctx.row > 0) {
+                                self.task_table_ctx.row -= 1;
+                            }
                         }
                         if (key.matchesAny(&.{ vaxis.Key.down, 'j' }, .{})) {
-                            self.task_table_ctx.row +|= 1;
+                            if (self.task_table_ctx.row < self.tasks.items.len) {
+                                self.task_table_ctx.row += 1;
+                            }
+                        }
+                        // Make sure the active table row never exceeds the number of tasks.
+                        if (self.tasks.items.len == 0) {
+                            self.task_table_ctx.row = 0;
+                        } else if (self.task_table_ctx.row >= self.tasks.items.len) {
+                            self.task_table_ctx.row = self.tasks.items.len - 1;
                         }
 
                         if (key.matchesAny(&.{ vaxis.Key.enter, 'l' }, .{})) {
