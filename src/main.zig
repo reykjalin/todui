@@ -190,6 +190,9 @@ const TodoApp = struct {
 
             try self.tasks.append(task);
         }
+
+        // Sort tasks.
+        std.sort.heap(Task, self.tasks.items, {}, compare_tasks);
     }
 
     fn clear_tasks(self: *TodoApp) void {
@@ -555,6 +558,24 @@ fn get_todo_app_log_storage_path(allocator: std.mem.Allocator) ![]const u8 {
     }
 
     unreachable;
+}
+
+fn get_file_number(file_name: []const u8) !i32 {
+    const stem = std.fs.path.stem(file_name);
+    return try std.fmt.parseInt(i32, stem, 10);
+}
+
+fn compare_tasks(context: void, a: Task, b: Task) bool {
+    // Parse file name stem into i32.
+    const number_a = get_file_number(a.file_path.items) catch |err| switch (err) {
+        else => 0,
+    };
+    const number_b = get_file_number(b.file_path.items) catch |err| switch (err) {
+        else => 0,
+    };
+
+    // Use std.sort.lessThan to compare.
+    return std.sort.asc(i32)(context, number_a, number_b);
 }
 
 fn log_to_file(comptime message_level: std.log.Level, comptime scope: @TypeOf(.enum_literal), comptime format: []const u8, args: anytype) void {
