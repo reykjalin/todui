@@ -455,27 +455,27 @@ const TodoApp = struct {
 
             const title_box = window.child(.{
                 .x_off = 1,
-                .y_off = 0,
+                .y_off = 1,
                 .width = .{ .limit = window.width - 2 },
-                .height = .{ .limit = 3 },
+                .height = .{ .limit = 1 },
             });
 
             const tags_box = window.child(.{
                 .x_off = 1,
-                .y_off = title_box.height,
+                .y_off = 2,
                 .width = .{ .limit = window.width - 2 },
-                .height = .{ .limit = 3 },
+                .height = .{ .limit = 1 },
             });
 
             const details_box = window.child(.{
                 .x_off = 1,
-                .y_off = title_box.height + tags_box.height,
+                .y_off = 4,
                 .width = .{ .limit = window.width - 2 },
-                .height = .{ .limit = window.height - title_box.height },
+                .height = .{ .limit = window.height - 2 },
             });
 
-            _ = try vaxis.widgets.border.all(title_box, .{}).printSegment(.{ .text = task.title.items }, .{});
-            _ = try vaxis.widgets.border.all(tags_box, .{}).printSegment(.{ .text = task.tags.items }, .{});
+            _ = try title_box.printSegment(.{ .text = task.title.items }, .{ .col_offset = (title_box.width / 2) - (task.title.items.len / 2) });
+            _ = try tags_box.printSegment(.{ .text = task.tags.items }, .{ .col_offset = (tags_box.width / 2) - (task.tags.items.len / 2) });
             _ = try vaxis.widgets.border.all(details_box, .{}).printSegment(.{ .text = task.details.items }, .{});
         } else {
             unreachable;
