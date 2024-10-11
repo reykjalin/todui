@@ -199,6 +199,8 @@ const TodoApp = struct {
             t.file_path.deinit();
         }
 
+        self.active_task = null;
+
         self.tasks.clearRetainingCapacity();
     }
 
@@ -298,6 +300,9 @@ const TodoApp = struct {
                                 // Halt the loop.
                                 loop.stop();
 
+                                const file_path_copy = try task.file_path.clone();
+                                defer file_path_copy.deinit();
+
                                 // Edit the file in Helix.
                                 var child = std.process.Child.init(&.{ "hx", task.file_path.items }, self.allocator);
                                 _ = try child.spawnAndWait();
@@ -310,6 +315,12 @@ const TodoApp = struct {
                                 // Reload the tasks.
                                 // FIXME: there is a crash here.
                                 try self.reload_tasks();
+
+                                for (self.tasks.items) |t| {
+                                    if (std.mem.eql(u8, t.file_path.items, file_path_copy.items)) {
+                                        self.active_task = t;
+                                    }
+                                }
                             }
                         } else {
                             self.active_layout = .TaskList;
