@@ -133,7 +133,6 @@ const TodoApp = struct {
 
         while (try iterator.next()) |f| {
             if (f.kind != std.fs.Dir.Entry.Kind.file) {
-                std.log.info("tagname {s}", .{@tagName(f.kind)});
                 continue;
             }
 
@@ -284,6 +283,46 @@ const TodoApp = struct {
                         if (key.matchesAny(&.{ vaxis.Key.enter, 'l' }, .{})) {
                             self.active_layout = .TaskDetails;
                             self.active_task = self.tasks.items[self.task_table_ctx.row];
+                        }
+
+                        if (key.matches('c', .{})) {
+                            // Get the currently highlighted task.
+                            const task_file = self.tasks.items[self.task_table_ctx.row].file_path.items;
+
+                            // Get the completed storage directory.
+                            const completed_storage = try get_completed_todo_file_storage_path_caller_should_free(self.allocator);
+                            defer self.allocator.free(completed_storage);
+
+                            // Get current date.
+                            const res = try std.process.Child.run(.{
+                                .allocator = self.allocator,
+                                .argv = &.{ "date", "+%Y-%m-%d" },
+                            });
+                            defer self.allocator.free(res.stdout);
+                            defer self.allocator.free(res.stderr);
+
+                            const date_str = try std.mem.replaceOwned(u8, self.allocator, res.stdout, "\n", "");
+                            defer self.allocator.free(date_str);
+
+                            // Hash the file path.
+                            var sha256 = std.crypto.hash.sha2.Sha256.init(.{});
+                            sha256.update(task_file);
+                            const hash = sha256.finalResult();
+
+                            const hex_digest = try std.fmt.allocPrint(self.allocator, "{s}", .{std.fmt.fmtSliceHexLower(&hash)});
+                            defer self.allocator.free(hex_digest);
+
+                            // Construct new path as yyyy-mm-dd-<hash>.
+                            const new_file_name = try std.fmt.allocPrint(self.allocator, "{s}-{s}.todo", .{ date_str, hex_digest });
+                            defer self.allocator.free(new_file_name);
+
+                            const new_file_path = try std.fs.path.join(self.allocator, &.{ completed_storage, new_file_name });
+                            defer self.allocator.free(new_file_path);
+
+                            // Move file to completed path.
+                            try std.fs.renameAbsolute(task_file, new_file_path);
+
+                            try self.reload_tasks();
                         }
 
                         if (key.matches('n', .{})) {
@@ -493,6 +532,21 @@ fn get_todo_file_storage_path_caller_should_free(allocator: std.mem.Allocator) !
 
     if (data_path) |p| {
         return try std.fs.path.join(allocator, &.{ p, "todo" });
+    }
+
+    unreachable;
+}
+
+fn get_completed_todo_file_storage_path_caller_should_free(allocator: std.mem.Allocator) ![]const u8 {
+    const data_path = try known_folders.getPath(allocator, known_folders.KnownFolder.data);
+    defer {
+        if (data_path) |p| {
+            allocator.free(p);
+        }
+    }
+
+    if (data_path) |p| {
+        return try std.fs.path.join(allocator, &.{ p, "todo", "completed" });
     }
 
     unreachable;
