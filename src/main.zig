@@ -37,11 +37,10 @@ const Event = union(enum) {
     // is started
 };
 
-const TaskTag = []u8;
-
 const Task = struct {
     title: std.ArrayList(u8),
-    tags: std.ArrayList(TaskTag),
+    /// All tags are currently stored as a single string.
+    tags: std.ArrayList(u8),
     details: std.ArrayList(u8),
     file_path: std.ArrayList(u8),
 };
@@ -141,7 +140,7 @@ const TodoApp = struct {
             }
             var task: Task = Task{
                 .title = std.ArrayList(u8).init(self.allocator),
-                .tags = std.ArrayList(TaskTag).init(self.allocator),
+                .tags = std.ArrayList(u8).init(self.allocator),
                 .details = std.ArrayList(u8).init(self.allocator),
                 .file_path = std.ArrayList(u8).init(self.allocator),
             };
@@ -169,6 +168,8 @@ const TodoApp = struct {
 
                 if (line_no == 1) {
                     try task.title.appendSlice(line.items);
+                } else if (line_no == 2) {
+                    try task.tags.appendSlice(line.items);
                 } else if (line_no > 3) {
                     try task.details.appendSlice(line.items);
                     try task.details.appendSlice("\n");
@@ -372,14 +373,14 @@ const TodoApp = struct {
     fn draw_task_list(self: *TodoApp) !void {
         const draw_table_allocator = self.arena_allocator.allocator();
 
-        var task_list = std.ArrayList(struct { title: []const u8 }).init(draw_table_allocator);
+        var task_list = std.ArrayList(struct { title: []const u8, tags: []const u8 }).init(draw_table_allocator);
 
         for (self.tasks.items) |task| {
-            try task_list.append(.{ .title = task.title.items });
+            try task_list.append(.{ .title = task.title.items, .tags = task.tags.items });
         }
 
         const window = vaxis.widgets.border.all(self.vx.window(), .{});
-        try vaxis.widgets.Table.drawTable(draw_table_allocator, window, &.{"Tasks"}, task_list, &self.task_table_ctx);
+        try vaxis.widgets.Table.drawTable(draw_table_allocator, window, &.{ "Tasks", "Tags" }, task_list, &self.task_table_ctx);
     }
 
     fn draw_task_details(self: *TodoApp) !void {
@@ -397,22 +398,30 @@ const TodoApp = struct {
             const window = vaxis.widgets.border.all(overlay, .{});
             window.clear();
 
-            const title_input_box = window.child(.{
+            const title_box = window.child(.{
                 .x_off = 1,
                 .y_off = 0,
                 .width = .{ .limit = window.width - 2 },
                 .height = .{ .limit = 3 },
             });
 
-            const details_input_box = window.child(.{
+            const tags_box = window.child(.{
                 .x_off = 1,
-                .y_off = title_input_box.height,
+                .y_off = title_box.height,
                 .width = .{ .limit = window.width - 2 },
-                .height = .{ .limit = window.height - title_input_box.height },
+                .height = .{ .limit = 3 },
             });
 
-            _ = try vaxis.widgets.border.all(title_input_box, .{}).printSegment(.{ .text = task.title.items }, .{});
-            _ = try vaxis.widgets.border.all(details_input_box, .{}).printSegment(.{ .text = task.details.items }, .{});
+            const details_box = window.child(.{
+                .x_off = 1,
+                .y_off = title_box.height + tags_box.height,
+                .width = .{ .limit = window.width - 2 },
+                .height = .{ .limit = window.height - title_box.height },
+            });
+
+            _ = try vaxis.widgets.border.all(title_box, .{}).printSegment(.{ .text = task.title.items }, .{});
+            _ = try vaxis.widgets.border.all(tags_box, .{}).printSegment(.{ .text = task.tags.items }, .{});
+            _ = try vaxis.widgets.border.all(details_box, .{}).printSegment(.{ .text = task.details.items }, .{});
         } else {
             unreachable;
         }
