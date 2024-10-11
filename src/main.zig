@@ -91,6 +91,8 @@ const TodoApp = struct {
                 .selected_bg = .{ .rgb = .{ 50, 50, 50 } },
                 .row_bg_1 = .{ .rgb = .{ 0, 0, 0 } },
                 .row_bg_2 = .{ .rgb = .{ 0, 0, 0 } },
+                .hdr_bg_1 = .{ .rgb = .{ 0, 0, 0 } },
+                .hdr_bg_2 = .{ .rgb = .{ 0, 0, 0 } },
             },
             .active_layout = .TaskList,
             .active_task = null,
