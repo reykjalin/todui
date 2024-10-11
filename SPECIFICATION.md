@@ -38,7 +38,6 @@ The name of the `.todo` file should indicate the way the todo items are ordered 
 The details on how this is accomplished is left to the implementation.
 The reference implementation uses ascending numbers.
 The todo at the top of the list is called `1.todo`, the next item might be called `2.todo` (or any other number higher than `1`), and so on.
-The only limitations set by the specification is that the file system should be left to sort the items, not the implementation.
 
 `.todo` files for completed tasks should be stored in `$XDG_DATA_HOME/todo/completed`.
 Once a task is completed it should be moved to `$XDG_DATA_HOME/todo/completed` and renamed such that it is prefixed by the date it was completed.
