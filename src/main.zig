@@ -297,6 +297,7 @@ const TodoApp = struct {
                             self.active_task = self.tasks.items[self.task_table_ctx.row];
                         }
 
+                        // Complete a task.
                         if (key.matches('c', .{})) {
                             // Get the currently highlighted task.
                             const task_file = self.tasks.items[self.task_table_ctx.row].file_path.items;
@@ -337,6 +338,7 @@ const TodoApp = struct {
                             try self.reload_tasks();
                         }
 
+                        // Create new task.
                         if (key.matches('n', .{})) {
                             // Halt the loop.
                             loop.stop();
@@ -345,32 +347,8 @@ const TodoApp = struct {
                             const storage_path = try get_todo_file_storage_path_caller_should_free(self.allocator);
                             defer self.allocator.free(storage_path);
 
-                            // Get a handle to the storage directory.
-                            // FIXME: Create storage directory if it does not exist.
-                            const storage_dir = try std.fs.openDirAbsolute(storage_path, .{});
-
-                            // Store the number for the last file.
-                            // Default to 1 because that's what we want if there are no files stored.
-                            var last_file_number: []const u8 = "1";
-
-                            // Find the last file if it exists.
-                            var it = storage_dir.iterate();
-                            while (try it.next()) |f| {
-                                // We're only interested in files, not directories.
-                                if (f.kind != std.fs.Dir.Entry.Kind.file) {
-                                    continue;
-                                }
-
-                                // FIXME: only include .todo files.
-
-                                last_file_number = std.fs.path.stem(f.name);
-                            }
-
-                            // Parse the file number into an i32.
-                            const list_file_i32 = try std.fmt.parseInt(i32, last_file_number, 10);
-
                             // Create the full file path for the new file.
-                            const new_file_name = try std.fmt.allocPrint(self.allocator, "{d}.todo", .{list_file_i32 + 1});
+                            const new_file_name = try std.fmt.allocPrint(self.allocator, "{d}.todo", .{self.tasks.items.len + 1});
                             defer self.allocator.free(new_file_name);
 
                             const new_file_path = try std.fs.path.join(self.allocator, &.{ storage_path, new_file_name });
