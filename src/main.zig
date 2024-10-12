@@ -247,11 +247,13 @@ const TodoApp = struct {
         const date_str = try std.mem.replaceOwned(u8, self.allocator, res.stdout, "\n", "");
         defer self.allocator.free(date_str);
 
-        // Hash the file path.
-        // FIXME: This won't work if you complete tasks in the same position on the same day.
-        //        Maybe just hash the current epoch + the file name?
+        // To make sure the hash is unique even if multiple files are completed per day we hash a
+        // string consisting of "{file_name}{millisecond_timestamp}{task-title}".
+        const str_to_hash = try std.fmt.allocPrint(self.allocator, "{s}{d}{s}", .{ task.file_path.items, std.time.milliTimestamp(), task.title.items });
+        defer self.allocator.free(str_to_hash);
+
         var sha256 = std.crypto.hash.sha2.Sha256.init(.{});
-        sha256.update(task.file_path.items);
+        sha256.update(str_to_hash);
         const hash = sha256.finalResult();
 
         const hex_digest = try std.fmt.allocPrint(self.allocator, "{s}", .{std.fmt.fmtSliceHexLower(&hash)});
