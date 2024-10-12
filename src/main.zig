@@ -702,14 +702,22 @@ const TodoApp = struct {
         const overlay = win.child(.{
             .x_off = 0,
             .y_off = 2,
-            .width = .{ .limit = win.width },
+            .width = .{ .limit = win.width - 2 },
             .height = .{ .limit = win.height - 4 },
             .border = .{ .where = .top },
         });
 
         overlay.clear();
 
-        self.task_filter_input.draw(overlay);
+        const input_container = overlay.child(.{
+            .x_off = 2,
+            .y_off = 3,
+            .width = .{ .limit = overlay.width - 4 },
+            .height = .{ .limit = 3 },
+            .border = .{ .where = .all },
+        });
+
+        self.task_filter_input.draw(input_container);
     }
 };
 
