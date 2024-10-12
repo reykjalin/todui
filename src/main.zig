@@ -47,7 +47,7 @@ const Task = struct {
     file_path: std.ArrayList(u8),
 };
 
-const Layout = union(enum) { TaskList, TaskDetails };
+const Layout = union(enum) { TaskList, TaskDetails, TaskFilter };
 
 /// The application state
 const TodoApp = struct {
@@ -72,11 +72,10 @@ const TodoApp = struct {
     active_layout: Layout,
     /// Currently detailed task.
     active_task: ?Task,
-    //== Task details ==//
     /// The title input.
-    details_title_input: vaxis.widgets.TextInput,
-    /// The details input.
-    details_details_input: vaxis.widgets.TextInput,
+    task_filter_input: vaxis.widgets.TextInput,
+    /// The task filter.
+    task_filter: std.ArrayList(u8),
 
     pub fn init(allocator: std.mem.Allocator) !TodoApp {
         var vx = try vaxis.init(allocator, .{});
@@ -101,8 +100,8 @@ const TodoApp = struct {
             },
             .active_layout = .TaskList,
             .active_task = null,
-            .details_title_input = vaxis.widgets.TextInput.init(allocator, &vx.unicode),
-            .details_details_input = vaxis.widgets.TextInput.init(allocator, &vx.unicode),
+            .task_filter_input = vaxis.widgets.TextInput.init(allocator, &vx.unicode),
+            .task_filter = std.ArrayList(u8).init(allocator),
         };
     }
 
@@ -117,8 +116,10 @@ const TodoApp = struct {
         self.arena_allocator.deinit();
 
         // Free any memory used by the text inputs.
-        self.details_title_input.deinit();
-        self.details_details_input.deinit();
+        self.task_filter_input.deinit();
+
+        // Free memory used by filters.
+        self.task_filter.deinit();
 
         // Make sure all the individual task structs are properly cleaned and freed before we
         // free the main task list.
@@ -191,7 +192,20 @@ const TodoApp = struct {
                 else => return err, // Propagate error
             }
 
-            try self.tasks.append(task);
+            // If a filter is passed in, make sure to only add tasks that match the filter.
+            if (self.task_filter.items.len > 0) {
+                if (std.mem.containsAtLeast(u8, task.tags.items, 1, self.task_filter.items)) {
+                    try self.tasks.append(task);
+                } else {
+                    // Need to free memory if the task is not added.
+                    task.title.deinit();
+                    task.tags.deinit();
+                    task.details.deinit();
+                    task.file_path.deinit();
+                }
+            } else {
+                try self.tasks.append(task);
+            }
         }
 
         // Sort tasks.
@@ -270,28 +284,63 @@ const TodoApp = struct {
         std.log.debug("", .{});
         std.log.debug("Starting complete task", .{});
 
-        if (idx < 0 or idx >= self.tasks.items.len) {
-            std.log.debug("Completing requested task {d} not possible. Task does not exist.", .{idx});
+        var index = idx;
+
+        if (index < 0 or index >= self.tasks.items.len) {
+            std.log.debug("Completing requested task {d} not possible. Task does not exist.", .{index});
             std.log.debug("End complete task", .{});
             return;
         }
 
-        std.log.debug("Completing task {d}: '{s}'", .{ idx, self.tasks.items[idx].title.items });
+        // Retain a copy of the file path so we can find the task to complete after reload.
+        const file_path_copy = try self.tasks.items[index].file_path.clone();
+        defer file_path_copy.deinit();
 
-        const completed_file_name = try self.calculate_completed_task_file_name(self.tasks.items[idx]);
+        std.log.debug("Reloading tasks without a filter", .{});
+
+        // Reload all tasks without a filter so the amount of total tasks is correct.
+        // NOTE: Not deferring a free here because `filter` will be moved back into the
+        //       ArrayList when the filter is reapplied.
+        const filter = try self.task_filter.toOwnedSlice();
+        try self.reload_tasks();
+
+        std.log.debug("Looking up the right index for task to complete after reloading all tasks", .{});
+
+        // Find the index of the task again.
+        for (0..self.tasks.items.len) |i| {
+            if (std.mem.eql(u8, self.tasks.items[i].file_path.items, file_path_copy.items)) {
+                index = i;
+                break;
+            }
+        }
+
+        std.log.debug("New index: {d}", .{index});
+
+        if (index < 0 or index >= self.tasks.items.len) {
+            std.log.debug("Completing requested task {d} not possible. Task does not exist.", .{index});
+            std.log.debug("End complete task", .{});
+            return;
+        }
+
+        std.log.debug("Completing task {d}: '{s}'", .{ index, self.tasks.items[index].title.items });
+
+        const completed_file_name = try self.calculate_completed_task_file_name(self.tasks.items[index]);
         defer self.allocator.free(completed_file_name);
 
         std.log.debug("Completed task's new file name: {s}", .{completed_file_name});
 
-        try std.fs.renameAbsolute(self.tasks.items[idx].file_path.items, completed_file_name);
+        try std.fs.renameAbsolute(self.tasks.items[index].file_path.items, completed_file_name);
 
-        std.log.debug("Task {d} completed", .{idx});
+        std.log.debug("Task {d} completed", .{index});
 
         // Shift all files that come after this task up by one.
-        for (idx + 1..self.tasks.items.len) |i| {
+        for (index + 1..self.tasks.items.len) |i| {
             std.log.debug("Renaming task {d} to {d}", .{ i, i - 1 });
             try self.rename_task(&self.tasks.items[i], i - 1);
         }
+
+        // Reapply the filter.
+        self.task_filter = std.ArrayList(u8).fromOwnedSlice(self.allocator, filter);
 
         try self.reload_tasks();
 
@@ -322,6 +371,12 @@ const TodoApp = struct {
     }
 
     fn create_new_task(self: *TodoApp) !void {
+        // Reload all tasks without a filter so the amount of total tasks is correct.
+        // NOTE: Not deferring a free here because `filter` will be moved back into the
+        //       ArrayList when the filter is reapplied.
+        const filter = try self.task_filter.toOwnedSlice();
+        try self.reload_tasks();
+
         // Get the storage path.
         const storage_path = try get_todo_file_storage_path_caller_should_free(self.allocator);
         defer self.allocator.free(storage_path);
@@ -334,6 +389,9 @@ const TodoApp = struct {
         defer self.allocator.free(new_file_path);
 
         try self.edit_file_path(new_file_path);
+
+        // Reapply the filter.
+        self.task_filter = std.ArrayList(u8).fromOwnedSlice(self.allocator, filter);
 
         // Once new task is created, reload all the tasks.
         try self.reload_tasks();
@@ -474,6 +532,11 @@ const TodoApp = struct {
                             // Switch back to the task list layout.
                             self.active_layout = .TaskList;
                         }
+
+                        // Start filter input.
+                        if (key.matches('f', .{})) {
+                            self.active_layout = .TaskFilter;
+                        }
                     },
                     .TaskDetails => {
                         if (self.active_task) |task| {
@@ -517,6 +580,31 @@ const TodoApp = struct {
                             try self.vx.setMouseMode(self.tty.anyWriter(), true);
                         }
                     },
+                    .TaskFilter => {
+                        if (key.matches(vaxis.Key.enter, .{})) {
+                            // Reset the current filter.
+                            self.task_filter.clearRetainingCapacity();
+
+                            // Get the text from the filter input.
+                            // .toOwnedSlice() resets the input, so no further action needed for
+                            // the input.
+                            const filter = try self.task_filter_input.toOwnedSlice();
+                            defer self.allocator.free(filter);
+
+                            // Update the filter.
+                            try self.task_filter.appendSlice(filter);
+
+                            try self.reload_tasks();
+
+                            // Switch back to the task list.
+                            self.active_layout = .TaskList;
+
+                            // Make sure the cursor is hidden.
+                            self.vx.window().hideCursor();
+                        } else {
+                            try self.task_filter_input.update(.{ .key_press = key });
+                        }
+                    },
                 }
             },
             // FIXME: Add mouse interactions so you can click around the TUI.
@@ -546,6 +634,7 @@ const TodoApp = struct {
         switch (self.active_layout) {
             .TaskList => try self.draw_task_list(),
             .TaskDetails => try self.draw_task_details(),
+            .TaskFilter => try self.draw_task_filter(),
         }
     }
 
@@ -604,6 +693,23 @@ const TodoApp = struct {
         } else {
             unreachable;
         }
+    }
+
+    fn draw_task_filter(self: *TodoApp) !void {
+        try self.draw_task_list();
+
+        const win = self.vx.window();
+        const overlay = win.child(.{
+            .x_off = 0,
+            .y_off = 2,
+            .width = .{ .limit = win.width },
+            .height = .{ .limit = win.height - 4 },
+            .border = .{ .where = .top },
+        });
+
+        overlay.clear();
+
+        self.task_filter_input.draw(overlay);
     }
 };
 
