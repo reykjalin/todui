@@ -141,11 +141,16 @@ const TodoApp = struct {
         var iterator = todo_dir.iterate();
 
         while (try iterator.next()) |f| {
+            // We're only interested in files.
             if (f.kind != std.fs.Dir.Entry.Kind.file) {
                 continue;
             }
 
-            // FIXME: only include .todo files.
+            // And we're only interested in .todo files specifically.
+            if (!std.mem.endsWith(u8, f.name, ".todo")) {
+                continue;
+            }
+
             var task: Task = Task{
                 .title = std.ArrayList(u8).init(self.allocator),
                 .tags = std.ArrayList(u8).init(self.allocator),
