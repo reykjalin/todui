@@ -526,7 +526,7 @@ const TodoApp = struct {
                         }
 
                         // Create new task.
-                        if (key.matches('n', .{})) {
+                        if (key.matches('A', .{})) {
                             try self.create_new_task();
 
                             // Switch back to the task list layout.
