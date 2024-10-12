@@ -709,6 +709,14 @@ const TodoApp = struct {
 
         overlay.clear();
 
+        const label_container = overlay.child(.{
+            .x_off = 2,
+            .y_off = 2,
+            .width = .{ .limit = overlay.width - 4 },
+            .height = .{ .limit = 1 },
+        });
+        _ = try label_container.printSegment(.{ .text = "Filter tasks by tag:" }, .{});
+
         const input_container = overlay.child(.{
             .x_off = 2,
             .y_off = 3,
