@@ -3,6 +3,39 @@
 A filesystem based TUI app for managing todo lists.
 The [`.todo` file specification](./SPECIFICATION.md) was created to fit this specific implementation.
 
+
+## Keybindings
+
+### Task List
+
+| Key | Action |
+|:---:|:---:|
+| <kbd>j</kbd> / <kbd>down</kbd> | Move selection down |
+| <kbd>k</kbd> / <kbd>up</kbd> | Move selection up|
+| <kbd>g</kbd> | Move selection to top |
+| <kbd>G</kbd> | Move selection to bottom |
+| <kbd>l</kbd> / <kbd>enter</kbd> | Open task details view for the selected task |
+| <kbd>A</kbd> | Create new task, appended to the bottom of the list |
+| <kbd>e</kbd> | Edit selected task |
+| <kbd>c</kbd> | Complete selected task |
+| <kbd>r</kbd> | Reload task list |
+| <kbd>f</kbd> | Open filter view |
+
+### Task Details
+
+| Key | Action |
+|:---:|:---:|
+| <kbd>h</kbd> / <kbd>esc</kbd> | Go back to task list view |
+| <kbd>e</kbd> | Edit task |
+| <kbd>c</kbd> | Complete task |
+
+### Task Filter
+
+| Key | Action |
+|:---:|:---:|
+| <kbd>enter</kbd> | Save filter. Empty filter results in no filtering being applied |
+
+
 ## Build instructions
 
 This app is written in Zig and libvaxis and uses the Zig Build system.
