@@ -316,6 +316,8 @@ const TodoApp = struct {
         // Restart the loop.
         try self.loop.?.start();
         try self.vx.enterAltScreen(self.tty.anyWriter());
+        // Re-enable mouse events.
+        try self.vx.setMouseMode(self.tty.anyWriter(), true);
         self.vx.queueRefresh();
     }
 
@@ -440,6 +442,12 @@ const TodoApp = struct {
                         if (key.matchesAny(&.{ vaxis.Key.enter, 'l' }, .{})) {
                             self.active_layout = .TaskDetails;
                             self.active_task = self.tasks.items[self.task_table_ctx.row];
+
+                            // Disable mouse events so we can select text in the UI using the
+                            // terminal itself.
+                            // FIXME: Add custom mouse handling for selecting text. This should
+                            //        allow for nicer UI without mangling text that is copied.
+                            try self.vx.setMouseMode(self.tty.anyWriter(), false);
                         }
 
                         // Actions.
@@ -472,19 +480,41 @@ const TodoApp = struct {
                             if (key.matchesAny(&.{ vaxis.Key.escape, 'h' }, .{})) {
                                 self.active_layout = .TaskList;
                                 self.active_task = null;
+
+                                // Re-enable mouse events.
+                                // FIXME: Add custom mouse handling for selecting text. This should
+                                //        allow for nicer UI without mangling text that is copied.
+                                try self.vx.setMouseMode(self.tty.anyWriter(), true);
                             }
 
                             if (key.matches('c', .{})) {
                                 try self.complete_task(self.task_table_ctx.row);
                                 self.active_layout = .TaskList;
                                 self.active_task = null;
+
+                                // Re-enable mouse events.
+                                // FIXME: Add custom mouse handling for selecting text. This should
+                                //        allow for nicer UI without mangling text that is copied.
+                                try self.vx.setMouseMode(self.tty.anyWriter(), true);
                             }
 
                             if (key.matches('e', .{})) {
                                 try self.edit_task(task);
+
+                                // Disable mouse events so we can select text in the UI using the
+                                // terminal itself. The editor disables mouse events which is why
+                                // this is necessary.
+                                // FIXME: Add custom mouse handling for selecting text. This should
+                                //        allow for nicer UI without mangling text that is copied.
+                                try self.vx.setMouseMode(self.tty.anyWriter(), false);
                             }
                         } else {
                             self.active_layout = .TaskList;
+
+                            // Re-enable mouse events.
+                            // FIXME: Add custom mouse handling for selecting text. This should
+                            //        allow for nicer UI without mangling text that is copied.
+                            try self.vx.setMouseMode(self.tty.anyWriter(), true);
                         }
                     },
                 }
