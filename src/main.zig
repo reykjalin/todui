@@ -492,6 +492,13 @@ const TodoApp = struct {
                                 self.task_table_ctx.row += 1;
                             }
                         }
+                        if (key.matches('g', .{})) {
+                            self.task_table_ctx.row = 0;
+                        }
+                        if (key.matches('G', .{})) {
+                            self.task_table_ctx.row = self.tasks.items.len - 1;
+                        }
+
                         // Make sure the active table row never exceeds the number of tasks.
                         if (self.tasks.items.len == 0) {
                             self.task_table_ctx.row = 0;
