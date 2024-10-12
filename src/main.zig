@@ -616,6 +616,8 @@ fn log_to_file(comptime message_level: std.log.Level, comptime scope: @TypeOf(.e
         else => return,
     };
 
+    log.seekFromEnd(0) catch return;
+
     // Get a writer.
     // See https://ziglang.org/documentation/master/std/#std.log.defaultLog.
     const log_writer = log.writer();
