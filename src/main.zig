@@ -214,6 +214,87 @@ const TodoApp = struct {
         try self.load_tasks();
     }
 
+    fn calculate_completed_task_file_name(self: *TodoApp, task: Task) ![]const u8 {
+        // Get the completed storage directory.
+        const completed_storage = try get_completed_todo_file_storage_path_caller_should_free(self.allocator);
+        defer self.allocator.free(completed_storage);
+
+        // Get current date.
+        const res = try std.process.Child.run(.{
+            .allocator = self.allocator,
+            .argv = &.{ "date", "+%Y-%m-%d" },
+        });
+        defer self.allocator.free(res.stdout);
+        defer self.allocator.free(res.stderr);
+
+        const date_str = try std.mem.replaceOwned(u8, self.allocator, res.stdout, "\n", "");
+        defer self.allocator.free(date_str);
+
+        // Hash the file path.
+        // FIXME: This won't work if you complete tasks in the same position on the same day.
+        //        Maybe just hash the current epoch + the file name?
+        var sha256 = std.crypto.hash.sha2.Sha256.init(.{});
+        sha256.update(task.file_path.items);
+        const hash = sha256.finalResult();
+
+        const hex_digest = try std.fmt.allocPrint(self.allocator, "{s}", .{std.fmt.fmtSliceHexLower(&hash)});
+        defer self.allocator.free(hex_digest);
+
+        // Construct new path as yyyy-mm-dd-<hash>.
+        const new_file_name = try std.fmt.allocPrint(self.allocator, "{s}-{s}.todo", .{ date_str, hex_digest });
+        defer self.allocator.free(new_file_name);
+
+        return try std.fs.path.join(self.allocator, &.{ completed_storage, new_file_name });
+    }
+
+    fn rename_task(self: *TodoApp, task: *Task, to: usize) !void {
+        const storage_path = try get_todo_file_storage_path_caller_should_free(self.allocator);
+        defer self.allocator.free(storage_path);
+
+        const new_file_name = try std.fmt.allocPrint(self.allocator, "{d}.todo", .{to});
+        defer self.allocator.free(new_file_name);
+
+        const new_file_path = try std.fs.path.join(self.allocator, &.{ storage_path, new_file_name });
+        defer self.allocator.free(new_file_path);
+
+        try std.fs.renameAbsolute(task.file_path.items, new_file_path);
+
+        task.file_path.clearRetainingCapacity();
+        try task.file_path.appendSlice(new_file_path);
+    }
+
+    fn complete_task(self: *TodoApp, idx: usize) !void {
+        std.log.debug("", .{});
+        std.log.debug("Starting complete task", .{});
+
+        if (idx < 0 or idx >= self.tasks.items.len) {
+            std.log.debug("Completing requested task {d} not possible. Task does not exist.", .{idx});
+            std.log.debug("End complete task", .{});
+            return;
+        }
+
+        std.log.debug("Completing task {d}: '{s}'", .{ idx, self.tasks.items[idx].title.items });
+
+        const completed_file_name = try self.calculate_completed_task_file_name(self.tasks.items[idx]);
+        defer self.allocator.free(completed_file_name);
+
+        std.log.debug("Completed task's new file name: {s}", .{completed_file_name});
+
+        try std.fs.renameAbsolute(self.tasks.items[idx].file_path.items, completed_file_name);
+
+        std.log.debug("Task {d} completed", .{idx});
+
+        // Shift all files that come after this task up by one.
+        for (idx + 1..self.tasks.items.len) |i| {
+            std.log.debug("Renaming task {d} to {d}", .{ i, i - 1 });
+            try self.rename_task(&self.tasks.items[i], i - 1);
+        }
+
+        try self.reload_tasks();
+
+        std.log.debug("End complete task", .{});
+    }
+
     pub fn run(self: *TodoApp) !void {
         // Load tasks. Loading early so I can log things.
         try self.load_tasks();
@@ -278,6 +359,7 @@ const TodoApp = struct {
 
                 switch (self.active_layout) {
                     .TaskList => {
+                        // Movement
                         if (key.matchesAny(&.{ vaxis.Key.up, 'k' }, .{})) {
                             if (self.task_table_ctx.row > 0) {
                                 self.task_table_ctx.row -= 1;
@@ -300,45 +382,16 @@ const TodoApp = struct {
                             self.active_task = self.tasks.items[self.task_table_ctx.row];
                         }
 
+                        // Actions.
+
+                        // Reload list.
+                        if (key.matches('r', .{})) {
+                            try self.reload_tasks();
+                        }
+
                         // Complete a task.
                         if (key.matches('c', .{})) {
-                            // Get the currently highlighted task.
-                            const task_file = self.tasks.items[self.task_table_ctx.row].file_path.items;
-
-                            // Get the completed storage directory.
-                            const completed_storage = try get_completed_todo_file_storage_path_caller_should_free(self.allocator);
-                            defer self.allocator.free(completed_storage);
-
-                            // Get current date.
-                            const res = try std.process.Child.run(.{
-                                .allocator = self.allocator,
-                                .argv = &.{ "date", "+%Y-%m-%d" },
-                            });
-                            defer self.allocator.free(res.stdout);
-                            defer self.allocator.free(res.stderr);
-
-                            const date_str = try std.mem.replaceOwned(u8, self.allocator, res.stdout, "\n", "");
-                            defer self.allocator.free(date_str);
-
-                            // Hash the file path.
-                            var sha256 = std.crypto.hash.sha2.Sha256.init(.{});
-                            sha256.update(task_file);
-                            const hash = sha256.finalResult();
-
-                            const hex_digest = try std.fmt.allocPrint(self.allocator, "{s}", .{std.fmt.fmtSliceHexLower(&hash)});
-                            defer self.allocator.free(hex_digest);
-
-                            // Construct new path as yyyy-mm-dd-<hash>.
-                            const new_file_name = try std.fmt.allocPrint(self.allocator, "{s}-{s}.todo", .{ date_str, hex_digest });
-                            defer self.allocator.free(new_file_name);
-
-                            const new_file_path = try std.fs.path.join(self.allocator, &.{ completed_storage, new_file_name });
-                            defer self.allocator.free(new_file_path);
-
-                            // Move file to completed path.
-                            try std.fs.renameAbsolute(task_file, new_file_path);
-
-                            try self.reload_tasks();
+                            try self.complete_task(self.task_table_ctx.row);
                         }
 
                         // Create new task.
@@ -351,7 +404,7 @@ const TodoApp = struct {
                             defer self.allocator.free(storage_path);
 
                             // Create the full file path for the new file.
-                            const new_file_name = try std.fmt.allocPrint(self.allocator, "{d}.todo", .{self.tasks.items.len + 1});
+                            const new_file_name = try std.fmt.allocPrint(self.allocator, "{d}.todo", .{self.tasks.items.len});
                             defer self.allocator.free(new_file_name);
 
                             const new_file_path = try std.fs.path.join(self.allocator, &.{ storage_path, new_file_name });
@@ -383,6 +436,12 @@ const TodoApp = struct {
                     .TaskDetails => {
                         if (self.active_task) |task| {
                             if (key.matchesAny(&.{ vaxis.Key.escape, 'h' }, .{})) {
+                                self.active_layout = .TaskList;
+                                self.active_task = null;
+                            }
+
+                            if (key.matches('c', .{})) {
+                                try self.complete_task(self.task_table_ctx.row);
                                 self.active_layout = .TaskList;
                                 self.active_task = null;
                             }
