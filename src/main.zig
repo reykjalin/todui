@@ -131,7 +131,10 @@ const TodoApp = struct {
         const todo_folder_path = try get_todo_file_storage_path_caller_should_free(self.allocator);
         defer self.allocator.free(todo_folder_path);
 
-        // FIXME: Handle file not found errors by creating the todo data folder.
+        std.fs.makeDirAbsolute(todo_folder_path) catch |err| switch (err) {
+            error.PathAlreadyExists => {},
+            else => return err,
+        };
         var todo_dir = try std.fs.openDirAbsolute(todo_folder_path, .{});
         defer todo_dir.close();
 
@@ -235,6 +238,12 @@ const TodoApp = struct {
         // Get the completed storage directory.
         const completed_storage = try get_completed_todo_file_storage_path_caller_should_free(self.allocator);
         defer self.allocator.free(completed_storage);
+
+        // Make sure the completed storage directory exists.
+        std.fs.makeDirAbsolute(completed_storage) catch |err| switch (err) {
+            error.PathAlreadyExists => {},
+            else => return err,
+        };
 
         // Get current date.
         const res = try std.process.Child.run(.{
