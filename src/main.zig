@@ -319,6 +319,42 @@ const TodoApp = struct {
         self.vx.queueRefresh();
     }
 
+    fn create_new_task(self: *TodoApp) !void {
+        // Get the storage path.
+        const storage_path = try get_todo_file_storage_path_caller_should_free(self.allocator);
+        defer self.allocator.free(storage_path);
+
+        // Create the full file path for the new file.
+        const new_file_name = try std.fmt.allocPrint(self.allocator, "{d}.todo", .{self.tasks.items.len});
+        defer self.allocator.free(new_file_name);
+
+        const new_file_path = try std.fs.path.join(self.allocator, &.{ storage_path, new_file_name });
+        defer self.allocator.free(new_file_path);
+
+        try self.edit_file_path(new_file_path);
+
+        // Once new task is created, reload all the tasks.
+        try self.reload_tasks();
+    }
+
+    fn edit_task(self: *TodoApp, task: Task) !void {
+        // Retain a copy of the file path for after the tasks are reloaded.
+        const file_path_copy = try task.file_path.clone();
+        defer file_path_copy.deinit();
+
+        try self.edit_file_path(task.file_path.items);
+
+        // Reload the tasks after the edit session is done.
+        try self.reload_tasks();
+
+        // Set the active item to the same item we just finished editing.
+        for (self.tasks.items) |t| {
+            if (std.mem.eql(u8, t.file_path.items, file_path_copy.items)) {
+                self.active_task = t;
+            }
+        }
+    }
+
     pub fn run(self: *TodoApp) !void {
         // Load tasks. Loading early so I can log things.
         try self.load_tasks();
@@ -418,26 +454,17 @@ const TodoApp = struct {
                             try self.complete_task(self.task_table_ctx.row);
                         }
 
+                        // Edit task.
+                        if (key.matches('e', .{})) {
+                            try self.edit_task(self.tasks.items[self.task_table_ctx.row]);
+                        }
+
                         // Create new task.
                         if (key.matches('n', .{})) {
-                            // Get the storage path.
-                            const storage_path = try get_todo_file_storage_path_caller_should_free(self.allocator);
-                            defer self.allocator.free(storage_path);
-
-                            // Create the full file path for the new file.
-                            const new_file_name = try std.fmt.allocPrint(self.allocator, "{d}.todo", .{self.tasks.items.len});
-                            defer self.allocator.free(new_file_name);
-
-                            const new_file_path = try std.fs.path.join(self.allocator, &.{ storage_path, new_file_name });
-                            defer self.allocator.free(new_file_path);
-
-                            try self.edit_file_path(new_file_path);
+                            try self.create_new_task();
 
                             // Switch back to the task list layout.
                             self.active_layout = .TaskList;
-
-                            // Once new task is created, reload all the tasks.
-                            try self.reload_tasks();
                         }
                     },
                     .TaskDetails => {
@@ -454,22 +481,7 @@ const TodoApp = struct {
                             }
 
                             if (key.matches('e', .{})) {
-                                // Retain a copy of the file path for after the tasks are reloaded.
-                                const file_path_copy = try task.file_path.clone();
-                                defer file_path_copy.deinit();
-
-                                try self.edit_file_path(file_path_copy.items);
-
-                                // Reload the tasks.
-                                // FIXME: there is a crash here.
-                                try self.reload_tasks();
-
-                                // Set the active item to the same item we just finished editing.
-                                for (self.tasks.items) |t| {
-                                    if (std.mem.eql(u8, t.file_path.items, file_path_copy.items)) {
-                                        self.active_task = t;
-                                    }
-                                }
+                                try self.edit_task(task);
                             }
                         } else {
                             self.active_layout = .TaskList;
