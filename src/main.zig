@@ -601,7 +601,10 @@ fn log_to_file(comptime message_level: std.log.Level, comptime scope: @TypeOf(.e
     defer allocator.free(log_directory_path);
 
     // Make sure log directory exists.
-    std.fs.makeDirAbsolute(log_directory_path) catch return;
+    std.fs.makeDirAbsolute(log_directory_path) catch |err| switch (err) {
+        error.PathAlreadyExists => {},
+        else => return,
+    };
 
     // Construct the absolute path to the log file.
     const log_file_path = std.fs.path.join(allocator, &.{ log_directory_path, "debug.log" }) catch return;
