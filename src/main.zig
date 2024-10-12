@@ -60,6 +60,8 @@ const TodoApp = struct {
     tty: vaxis.Tty,
     /// The vaxis instance
     vx: vaxis.Vaxis,
+    /// Reference to the event loop.
+    loop: ?vaxis.Loop(Event),
     /// A mouse event that we will handle in the draw cycle
     mouse: ?vaxis.Mouse,
     /// List of loaded tasks.
@@ -84,6 +86,7 @@ const TodoApp = struct {
             .should_quit = false,
             .tty = try vaxis.Tty.init(),
             .vx = vx,
+            .loop = null,
             .mouse = null,
             .tasks = std.ArrayList(Task).init(allocator),
             .task_table_ctx = .{
@@ -295,19 +298,40 @@ const TodoApp = struct {
         std.log.debug("End complete task", .{});
     }
 
+    fn edit_file_path(self: *TodoApp, file_path: []const u8) !void {
+        // Halt the event loop.
+        self.loop.?.stop();
+
+        // Get the executable environment.
+        var env = try std.process.getEnvMap(self.allocator);
+        defer env.deinit();
+
+        // Use the $EDITOR environment variable if it's available; default to nano.
+        const editor = env.get("EDITOR") orelse "nano";
+
+        // Edit the todo file using $EDITOR.
+        var child = std.process.Child.init(&.{ editor, file_path }, self.allocator);
+        _ = try child.spawnAndWait();
+
+        // Restart the loop.
+        try self.loop.?.start();
+        try self.vx.enterAltScreen(self.tty.anyWriter());
+        self.vx.queueRefresh();
+    }
+
     pub fn run(self: *TodoApp) !void {
         // Load tasks. Loading early so I can log things.
         try self.load_tasks();
 
         // Initialize our event loop. This particular loop requires intrusive init
-        var loop: vaxis.Loop(Event) = .{
+        self.loop = .{
             .tty = &self.tty,
             .vaxis = &self.vx,
         };
-        try loop.init();
+        try self.loop.?.init();
 
         // Start the event loop. Events will now be queued
-        try loop.start();
+        try self.loop.?.start();
 
         try self.vx.enterAltScreen(self.tty.anyWriter());
 
@@ -327,10 +351,10 @@ const TodoApp = struct {
         // 3. Render
         while (!self.should_quit) {
             // pollEvent blocks until we have an event
-            loop.pollEvent();
+            self.loop.?.pollEvent();
             // tryEvent returns events until the queue is empty
-            while (loop.tryEvent()) |event| {
-                try self.update(&loop, event);
+            while (self.loop.?.tryEvent()) |event| {
+                try self.update(event);
             }
             // Draw our application after handling events
             try self.draw();
@@ -345,7 +369,7 @@ const TodoApp = struct {
     }
 
     /// Update our application state from an event
-    pub fn update(self: *TodoApp, loop: *vaxis.Loop(Event), event: Event) !void {
+    pub fn update(self: *TodoApp, event: Event) !void {
         switch (event) {
             .key_press => |key| {
                 // key.matches does some basic matching algorithms. Key matching can be complex in
@@ -396,9 +420,6 @@ const TodoApp = struct {
 
                         // Create new task.
                         if (key.matches('n', .{})) {
-                            // Halt the loop.
-                            loop.stop();
-
                             // Get the storage path.
                             const storage_path = try get_todo_file_storage_path_caller_should_free(self.allocator);
                             defer self.allocator.free(storage_path);
@@ -410,24 +431,10 @@ const TodoApp = struct {
                             const new_file_path = try std.fs.path.join(self.allocator, &.{ storage_path, new_file_name });
                             defer self.allocator.free(new_file_path);
 
-                            // Get the executable environment.
-                            var env = try std.process.getEnvMap(self.allocator);
-                            defer env.deinit();
-
-                            // Use the $EDITOR environment variable if it's available; default to nano.
-                            const editor = env.get("EDITOR") orelse "nano";
-
-                            // Edit the todo file using $EDITOR.
-                            var child = std.process.Child.init(&.{ editor, new_file_path }, self.allocator);
-                            _ = try child.spawnAndWait();
+                            try self.edit_file_path(new_file_path);
 
                             // Switch back to the task list layout.
                             self.active_layout = .TaskList;
-
-                            // Restart the loop.
-                            try loop.start();
-                            try self.vx.enterAltScreen(self.tty.anyWriter());
-                            self.vx.queueRefresh();
 
                             // Once new task is created, reload all the tasks.
                             try self.reload_tasks();
@@ -447,33 +454,17 @@ const TodoApp = struct {
                             }
 
                             if (key.matches('e', .{})) {
-                                // Halt the loop.
-                                loop.stop();
-
                                 // Retain a copy of the file path for after the tasks are reloaded.
                                 const file_path_copy = try task.file_path.clone();
                                 defer file_path_copy.deinit();
 
-                                // Get the executable environment.
-                                var env = try std.process.getEnvMap(self.allocator);
-                                defer env.deinit();
-
-                                // Use the $EDITOR environment variable if it's available; default to nano.
-                                const editor = env.get("EDITOR") orelse "nano";
-
-                                // Edit the todo file using $EDITOR.
-                                var child = std.process.Child.init(&.{ editor, task.file_path.items }, self.allocator);
-                                _ = try child.spawnAndWait();
-
-                                // Restart the loop.
-                                try loop.start();
-                                try self.vx.enterAltScreen(self.tty.anyWriter());
-                                self.vx.queueRefresh();
+                                try self.edit_file_path(file_path_copy.items);
 
                                 // Reload the tasks.
                                 // FIXME: there is a crash here.
                                 try self.reload_tasks();
 
+                                // Set the active item to the same item we just finished editing.
                                 for (self.tasks.items) |t| {
                                     if (std.mem.eql(u8, t.file_path.items, file_path_copy.items)) {
                                         self.active_task = t;
