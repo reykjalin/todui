@@ -3,6 +3,8 @@
 A filesystem based TUI app for managing todo lists.
 The [`.todo` file specification](./SPECIFICATION.md) was created to fit this specific implementation.
 
+![Todo TUI at commit hash `f685a6b9eb66224b8308db12948638819a1a56f8`](./screenshots/task-list-f685a6b9eb66224b8308db12948638819a1a56f8.webp)
+
 
 ## Keybindings
 
