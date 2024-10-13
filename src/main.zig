@@ -797,7 +797,7 @@ const TodoApp = struct {
                 .y_off = 2,
                 .width = .{ .limit = win.width },
                 .height = .{ .limit = win.height - 4 },
-                .border = .{ .where = .top },
+                .border = .{ .where = .{ .other = .{ .top = true, .bottom = true } } },
             });
 
             overlay.clear();
