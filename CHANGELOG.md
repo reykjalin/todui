@@ -22,6 +22,5 @@ If another release is tagged in the same month I would add a patch number, such 
 
 * Tasks cannot be reordered.
 * You cannot view your completed tasks through the app.
-* Dates are currently calculated by shelling out to `date`, so probably not Windows compatible at the moment.
 * No mouse support.
 * Multiple selections are not a thing yet.

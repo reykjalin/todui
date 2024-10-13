@@ -20,7 +20,15 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    const known_folders = b.dependency("known-folders", .{}).module("known-folders");
+    const known_folders = b.dependency("known-folders", .{
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const zeit_dep = b.dependency("zeit", .{
+        .target = target,
+        .optimize = optimize,
+    });
 
     const exe = b.addExecutable(.{
         .name = "todo",
@@ -29,7 +37,8 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     exe.root_module.addImport("vaxis", vaxis_dep.module("vaxis"));
-    exe.root_module.addImport("known-folders", known_folders);
+    exe.root_module.addImport("known-folders", known_folders.module("known-folders"));
+    exe.root_module.addImport("zeit", zeit_dep.module("zeit"));
 
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default

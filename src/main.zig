@@ -1,7 +1,7 @@
 const std = @import("std");
 const vaxis = @import("vaxis");
 const known_folders = @import("known-folders");
-const gb = @import("gap_buffer");
+const zeit = @import("zeit");
 
 /// Set known folders to use XDG paths on macOS.
 pub const known_folders_config = .{
@@ -253,16 +253,22 @@ const TodoApp = struct {
             else => return err,
         };
 
-        // Get current date.
-        const res = try std.process.Child.run(.{
-            .allocator = self.allocator,
-            .argv = &.{ "date", "+%Y-%m-%d" },
-        });
-        defer self.allocator.free(res.stdout);
-        defer self.allocator.free(res.stderr);
+        // Get the executable environment.
+        var env = try std.process.getEnvMap(self.allocator);
+        defer env.deinit();
 
-        const date_str = try std.mem.replaceOwned(u8, self.allocator, res.stdout, "\n", "");
-        defer self.allocator.free(date_str);
+        // Load local timezone.
+        const local = try zeit.local(self.allocator, &env);
+        defer local.deinit();
+
+        // Get zeit instant for current date.
+        const now = try zeit.instant(.{ .timezone = &local });
+        const dt = now.time();
+
+        // YYYY-mm-dd should only have 10 characters, 6 more included for future proofing?
+        // Obviously this should all work at least until the year 999999999. Obviously.
+        var buf: [16]u8 = undefined;
+        const date_str = try std.fmt.bufPrint(&buf, "{d:0>4}-{d:0>2}-{d:0>2}", .{ @as(u32, @intCast(dt.year)), @intFromEnum(dt.month), dt.day });
 
         // To make sure the hash is unique even if multiple files are completed per day we hash a
         // string consisting of "{file_name}{millisecond_timestamp}{task-title}".
