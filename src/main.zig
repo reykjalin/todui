@@ -130,15 +130,65 @@ const TodoApp = struct {
         self.tasks.deinit();
     }
 
-    fn load_tasks(self: *TodoApp) !void {
-        const todo_folder_path = try get_todo_file_storage_path_caller_should_free(self.allocator);
-        defer self.allocator.free(todo_folder_path);
+    fn get_task_from_file(self: *TodoApp, file: []const u8) !Task {
+        var task: Task = Task{
+            .title = std.ArrayList(u8).init(self.allocator),
+            .tags = std.ArrayList(u8).init(self.allocator),
+            .details = std.ArrayList(u8).init(self.allocator),
+            .file_path = std.ArrayList(u8).init(self.allocator),
+        };
 
-        std.fs.makeDirAbsolute(todo_folder_path) catch |err| switch (err) {
+        try task.file_path.appendSlice(file);
+
+        const fd = try std.fs.openFileAbsolute(file, .{});
+        defer fd.close();
+
+        var buf_reader = std.io.bufferedReader(fd.reader());
+        const reader = buf_reader.reader();
+
+        var line = std.ArrayList(u8).init(self.allocator);
+        defer line.deinit();
+
+        const writer = line.writer();
+        var line_no: usize = 0;
+
+        while (reader.streamUntilDelimiter(writer, '\n', null)) {
+            // Clear the line so we can reuse it.
+            defer line.clearRetainingCapacity();
+            line_no += 1;
+
+            if (line_no == 1) {
+                try task.title.appendSlice(line.items);
+            } else if (line_no == 2) {
+                try task.tags.appendSlice(line.items);
+            } else if (line_no > 3) {
+                try task.details.appendSlice(line.items);
+                try task.details.appendSlice("\n");
+            }
+        } else |err| switch (err) {
+            error.EndOfStream => { // end of file
+                line_no += 1;
+
+                if (line_no == 1) {
+                    try task.title.appendSlice(line.items);
+                } else if (line_no > 3) {
+                    try task.details.appendSlice(line.items);
+                }
+            },
+            else => return err, // Propagate error
+        }
+
+        return task;
+    }
+
+    fn get_tasks_from_dir(self: *TodoApp, dir: []const u8) !std.ArrayList(Task) {
+        var tasks = std.ArrayList(Task).init(self.allocator);
+
+        std.fs.makeDirAbsolute(dir) catch |err| switch (err) {
             error.PathAlreadyExists => {},
             else => return err,
         };
-        var todo_dir = try std.fs.openDirAbsolute(todo_folder_path, .{});
+        var todo_dir = try std.fs.openDirAbsolute(dir, .{});
         defer todo_dir.close();
 
         var iterator = todo_dir.iterate();
@@ -154,59 +204,15 @@ const TodoApp = struct {
                 continue;
             }
 
-            var task: Task = Task{
-                .title = std.ArrayList(u8).init(self.allocator),
-                .tags = std.ArrayList(u8).init(self.allocator),
-                .details = std.ArrayList(u8).init(self.allocator),
-                .file_path = std.ArrayList(u8).init(self.allocator),
-            };
-
-            const file_path = try std.fs.path.join(self.allocator, &.{ todo_folder_path, f.name });
-            try task.file_path.appendSlice(file_path);
-
+            const file_path = try std.fs.path.join(self.allocator, &.{ dir, f.name });
             defer self.allocator.free(file_path);
-            const file = try std.fs.openFileAbsolute(file_path, .{});
-            defer file.close();
 
-            var buf_reader = std.io.bufferedReader(file.reader());
-            const reader = buf_reader.reader();
-
-            var line = std.ArrayList(u8).init(self.allocator);
-            defer line.deinit();
-
-            const writer = line.writer();
-            var line_no: usize = 0;
-
-            while (reader.streamUntilDelimiter(writer, '\n', null)) {
-                // Clear the line so we can reuse it.
-                defer line.clearRetainingCapacity();
-                line_no += 1;
-
-                if (line_no == 1) {
-                    try task.title.appendSlice(line.items);
-                } else if (line_no == 2) {
-                    try task.tags.appendSlice(line.items);
-                } else if (line_no > 3) {
-                    try task.details.appendSlice(line.items);
-                    try task.details.appendSlice("\n");
-                }
-            } else |err| switch (err) {
-                error.EndOfStream => { // end of file
-                    line_no += 1;
-
-                    if (line_no == 1) {
-                        try task.title.appendSlice(line.items);
-                    } else if (line_no > 3) {
-                        try task.details.appendSlice(line.items);
-                    }
-                },
-                else => return err, // Propagate error
-            }
+            const task = try self.get_task_from_file(file_path);
 
             // If a filter is passed in, make sure to only add tasks that match the filter.
             if (self.task_filter.items.len > 0) {
                 if (std.mem.containsAtLeast(u8, task.tags.items, 1, self.task_filter.items)) {
-                    try self.tasks.append(task);
+                    try tasks.append(task);
                 } else {
                     // Need to free memory if the task is not added.
                     task.title.deinit();
@@ -215,9 +221,19 @@ const TodoApp = struct {
                     task.file_path.deinit();
                 }
             } else {
-                try self.tasks.append(task);
+                try tasks.append(task);
             }
         }
+
+        return tasks;
+    }
+
+    fn load_tasks(self: *TodoApp) !void {
+        const todo_folder_path = try get_todo_file_storage_path_caller_should_free(self.allocator);
+        defer self.allocator.free(todo_folder_path);
+
+        self.tasks.clearAndFree();
+        self.tasks = try self.get_tasks_from_dir(todo_folder_path);
 
         // Sort tasks.
         std.sort.heap(Task, self.tasks.items, {}, compare_tasks);
