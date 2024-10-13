@@ -16,8 +16,12 @@ If another release is tagged in the same month I would add a patch number, such 
 * Tasks can be edited with your `$EDITOR` of choice, defaults to `nano`.
 * Filter tasks by tag. Filter input is currently free-form.
 * Task details - title, tags, and details - can be viewed.
+* Toggle the visibility of the tags column.
 
 ### Known issues and missing features
 
 * Tasks cannot be reordered.
 * You cannot view your completed tasks through the app.
+* Dates are currently calculated by shelling out to `date`, so probably not Windows compatible at the moment.
+* No mouse support.
+* Multiple selections are not a thing yet.

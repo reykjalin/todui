@@ -22,6 +22,7 @@ The [`.todo` file specification](./SPECIFICATION.md) was created to fit this spe
 | <kbd>c</kbd> | Complete selected task |
 | <kbd>r</kbd> | Reload task list |
 | <kbd>f</kbd> | Open filter view |
+| <kbd>H</kbd> | Hide the tags column |
 
 ### Task Details
 

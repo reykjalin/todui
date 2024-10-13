@@ -76,6 +76,8 @@ const TodoApp = struct {
     task_filter_input: vaxis.widgets.TextInput,
     /// The task filter.
     task_filter: std.ArrayList(u8),
+    /// Indicates whether the tags should be displayed.
+    should_show_tags_in_task_list: bool,
 
     pub fn init(allocator: std.mem.Allocator) !TodoApp {
         var vx = try vaxis.init(allocator, .{});
@@ -102,6 +104,7 @@ const TodoApp = struct {
             .active_task = null,
             .task_filter_input = vaxis.widgets.TextInput.init(allocator, &vx.unicode),
             .task_filter = std.ArrayList(u8).init(allocator),
+            .should_show_tags_in_task_list = true,
         };
     }
 
@@ -560,6 +563,11 @@ const TodoApp = struct {
                         if (key.matches('f', .{})) {
                             self.active_layout = .TaskFilter;
                         }
+
+                        // Toggle the display of tags.
+                        if (key.matches('H', .{})) {
+                            self.should_show_tags_in_task_list = !self.should_show_tags_in_task_list;
+                        }
                     },
                     .TaskDetails => {
                         if (self.active_task) |task| {
@@ -671,7 +679,11 @@ const TodoApp = struct {
         }
 
         const window = vaxis.widgets.border.all(self.vx.window(), .{});
-        try vaxis.widgets.Table.drawTable(draw_table_allocator, window, &.{ "Tasks", "Tags" }, task_list, &self.task_table_ctx);
+        if (self.should_show_tags_in_task_list) {
+            try vaxis.widgets.Table.drawTable(draw_table_allocator, window, &.{ "Tasks", "Tags" }, task_list, &self.task_table_ctx);
+        } else {
+            try vaxis.widgets.Table.drawTable(draw_table_allocator, window, &.{"Tasks"}, task_list, &self.task_table_ctx);
+        }
     }
 
     fn draw_task_details(self: *TodoApp) !void {
