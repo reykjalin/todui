@@ -698,6 +698,11 @@ const TodoApp = struct {
 
                             // Make sure the cursor is hidden.
                             self.vx.window().hideCursor();
+
+                            // Make sure the selectd row isn't outside allowed bounds.
+                            if (self.task_table_ctx.row >= self.tasks.items.len) {
+                                self.task_table_ctx.row = self.tasks.items.len;
+                            }
                         } else {
                             try self.task_filter_input.update(.{ .key_press = key });
                         }
