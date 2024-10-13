@@ -310,7 +310,6 @@ const TodoApp = struct {
     }
 
     fn complete_task(self: *TodoApp, idx: usize) !void {
-        std.log.debug("", .{});
         std.log.debug("Starting complete task", .{});
 
         var index = idx;
@@ -454,29 +453,47 @@ const TodoApp = struct {
             return;
         }
 
-        // Get the tasks being swapped;
-        var task_a = self.tasks.items[a_idx];
-        var task_b = self.tasks.items[b_idx];
+        std.log.debug("Reloading tasks without a filter to get correct number of tasks", .{});
 
-        std.log.debug("Swapping tasks {d} ('{s}') and {d} ('{s}')", .{ a_idx, task_a.title.items, b_idx, task_b.title.items });
+        // Reload all tasks without a filter so the amount of total tasks is correct.
+        // NOTE: Not deferring a free here because `filter` will be moved back into the
+        //       ArrayList when the filter is reapplied.
+        const filter = try self.task_filter.toOwnedSlice();
+        try self.reload_tasks();
 
         // Use the end of the list as a temporary slot while swapping files.
         const tmp_idx = self.tasks.items.len;
 
-        std.log.debug("Moving task {d}.todo to {d}.todo", .{ a_idx, tmp_idx });
+        std.log.debug("Reapplying filter", .{});
+
+        // Reapply the filter.
+        self.task_filter = std.ArrayList(u8).fromOwnedSlice(self.allocator, filter);
+
+        // Reload the tasks list so we get the right tasks to swap.
+        try self.reload_tasks();
+
+        // Get the tasks being swapped;
+        var task_a = self.tasks.items[a_idx];
+        var task_b = self.tasks.items[b_idx];
+        const task_a_number = try get_file_number(task_a.file_path.items);
+        const task_b_number = try get_file_number(task_b.file_path.items);
+
+        std.log.debug("Swapping tasks {d} ('{s}') and {d} ('{s}')", .{ task_a_number, task_a.title.items, task_b_number, task_b.title.items });
+
+        std.log.debug("Moving task {d}.todo to {d}.todo", .{ task_a_number, tmp_idx });
 
         // Move task a to the temporary position.
         try self.rename_task(&task_a, tmp_idx);
 
-        std.log.debug("Moving task {d}.todo to {d}.todo", .{ b_idx, a_idx });
+        std.log.debug("Moving task {d}.todo to {d}.todo", .{ task_b_number, task_a_number });
 
         // Move task b to task a original position.
-        try self.rename_task(&task_b, a_idx);
+        try self.rename_task(&task_b, task_a_number);
 
-        std.log.debug("Moving task {d}.todo to {d}.todo", .{ a_idx, b_idx });
+        std.log.debug("Moving task {d}.todo to {d}.todo", .{ task_a_number, task_b_number });
 
         // Move task a to task b original position.
-        try self.rename_task(&task_a, b_idx);
+        try self.rename_task(&task_a, task_b_number);
 
         std.log.debug("Reloading tasks list", .{});
 
@@ -585,7 +602,7 @@ const TodoApp = struct {
                         if (self.tasks.items.len == 0) {
                             self.task_table_ctx.row = 0;
                         } else if (self.task_table_ctx.row >= self.tasks.items.len) {
-                            self.task_table_ctx.row = self.tasks.items.len - 1;
+                            self.task_table_ctx.row -= 1;
                         }
 
                         // Actions.
@@ -880,9 +897,9 @@ fn get_todo_app_log_storage_path(allocator: std.mem.Allocator) ![]const u8 {
     unreachable;
 }
 
-fn get_file_number(file_name: []const u8) !i32 {
+fn get_file_number(file_name: []const u8) !usize {
     const stem = std.fs.path.stem(file_name);
-    return try std.fmt.parseInt(i32, stem, 10);
+    return try std.fmt.parseInt(usize, stem, 10);
 }
 
 fn compare_tasks(context: void, a: Task, b: Task) bool {
@@ -895,7 +912,7 @@ fn compare_tasks(context: void, a: Task, b: Task) bool {
     };
 
     // Use std.sort.lessThan to compare.
-    return std.sort.asc(i32)(context, number_a, number_b);
+    return std.sort.asc(usize)(context, number_a, number_b);
 }
 
 fn log_to_file(comptime message_level: std.log.Level, comptime scope: @TypeOf(.enum_literal), comptime format: []const u8, args: anytype) void {
