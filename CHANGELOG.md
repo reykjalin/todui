@@ -17,6 +17,7 @@ If another release is tagged in the same month I would add a patch number, such 
 * Filter tasks by tag. Filter input is currently free-form.
 * Task details - title, tags, and details - can be viewed.
 * Toggle the visibility of the tags column.
+* Reorder tasks in the task list.
 
 ### Known issues and missing features
 
