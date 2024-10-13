@@ -444,6 +444,48 @@ const TodoApp = struct {
         }
     }
 
+    fn swap_tasks(self: *TodoApp, a_idx: usize, b_idx: usize) !void {
+        std.log.debug("Start swap tasks", .{});
+
+        // Can't move out of bounds.
+        if (a_idx < 0 or a_idx >= self.tasks.items.len or b_idx < 0 or b_idx >= self.tasks.items.len) {
+            std.log.debug("Can't swap tasks that don't exist", .{});
+            std.log.debug("End swap tasks", .{});
+            return;
+        }
+
+        // Get the tasks being swapped;
+        var task_a = self.tasks.items[a_idx];
+        var task_b = self.tasks.items[b_idx];
+
+        std.log.debug("Swapping tasks {d} ('{s}') and {d} ('{s}')", .{ a_idx, task_a.title.items, b_idx, task_b.title.items });
+
+        // Use the end of the list as a temporary slot while swapping files.
+        const tmp_idx = self.tasks.items.len;
+
+        std.log.debug("Moving task {d}.todo to {d}.todo", .{ a_idx, tmp_idx });
+
+        // Move task a to the temporary position.
+        try self.rename_task(&task_a, tmp_idx);
+
+        std.log.debug("Moving task {d}.todo to {d}.todo", .{ b_idx, a_idx });
+
+        // Move task b to task a original position.
+        try self.rename_task(&task_b, a_idx);
+
+        std.log.debug("Moving task {d}.todo to {d}.todo", .{ a_idx, b_idx });
+
+        // Move task a to task b original position.
+        try self.rename_task(&task_a, b_idx);
+
+        std.log.debug("Reloading tasks list", .{});
+
+        // Reload the tasks list.
+        try self.reload_tasks();
+
+        std.log.debug("End swap tasks", .{});
+    }
+
     pub fn run(self: *TodoApp) !void {
         // Load tasks. Loading early so I can log things.
         try self.load_tasks();
@@ -526,6 +568,19 @@ const TodoApp = struct {
                             self.task_table_ctx.row = self.tasks.items.len - 1;
                         }
 
+                        // Move tasks down.
+                        if (key.matches('J', .{}) or key.matches(vaxis.Key.down, .{ .shift = true })) {
+                            try self.swap_tasks(self.task_table_ctx.row, self.task_table_ctx.row + 1);
+                            self.task_table_ctx.row += 1;
+                        }
+                        // Move tasks up.
+                        if (key.matches('K', .{}) or key.matches(vaxis.Key.up, .{ .shift = true })) {
+                            if (self.task_table_ctx.row > 0) {
+                                try self.swap_tasks(self.task_table_ctx.row, self.task_table_ctx.row - 1);
+                                self.task_table_ctx.row -= 1;
+                            }
+                        }
+
                         // Make sure the active table row never exceeds the number of tasks.
                         if (self.tasks.items.len == 0) {
                             self.task_table_ctx.row = 0;
@@ -533,6 +588,9 @@ const TodoApp = struct {
                             self.task_table_ctx.row = self.tasks.items.len - 1;
                         }
 
+                        // Actions.
+
+                        // Open task details.
                         if (key.matchesAny(&.{ vaxis.Key.enter, 'l' }, .{})) {
                             self.active_layout = .TaskDetails;
                             self.active_task = self.tasks.items[self.task_table_ctx.row];
@@ -543,8 +601,6 @@ const TodoApp = struct {
                             //        allow for nicer UI without mangling text that is copied.
                             try self.vx.setMouseMode(self.tty.anyWriter(), false);
                         }
-
-                        // Actions.
 
                         // Reload list.
                         if (key.matches('r', .{})) {

@@ -16,6 +16,8 @@ The [`.todo` file specification](./SPECIFICATION.md) was created to fit this spe
 | <kbd>k</kbd> / <kbd>up</kbd> | Move selection up|
 | <kbd>g</kbd> | Move selection to top |
 | <kbd>G</kbd> | Move selection to bottom |
+| <kbd>J</kbd> / <kbd>shift+down</kbd> | Move selected task down |
+| <kbd>K</kbd> / <kbd>shift+up</kbd> | Move selected task up |
 | <kbd>l</kbd> / <kbd>enter</kbd> | Open task details view for the selected task |
 | <kbd>A</kbd> | Create new task, appended to the bottom of the list |
 | <kbd>e</kbd> | Edit selected task |

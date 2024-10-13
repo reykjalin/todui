@@ -20,7 +20,6 @@ If another release is tagged in the same month I would add a patch number, such 
 
 ### Known issues and missing features
 
-* Tasks cannot be reordered.
 * You cannot view your completed tasks through the app.
 * No mouse support.
 * Multiple selections are not a thing yet.
