@@ -708,24 +708,28 @@ const TodoApp = struct {
                             // Update the filter.
                             try self.task_filter.appendSlice(filter);
 
-                            // Get file path for current task to see if we can find the same task
-                            // after the list has been filtered.
-                            const file_path_copy = try self.tasks.items[self.task_table_ctx.row].file_path.clone();
-                            defer file_path_copy.deinit();
-
-                            try self.reload_tasks();
-
                             // Switch back to the task list.
                             self.active_layout = .TaskList;
 
                             // Make sure the cursor is hidden.
                             self.vx.window().hideCursor();
 
-                            // Try to find the same task to keep it selected.
-                            for (0..self.tasks.items.len) |i| {
-                                if (std.mem.eql(u8, self.tasks.items[i].file_path.items, file_path_copy.items)) {
-                                    self.task_table_ctx.row = i;
-                                    break;
+                            if (self.tasks.items.len == 0) {
+                                try self.reload_tasks();
+                            } else {
+                                // Get file path for current task to see if we can find the same task
+                                // after the list has been filtered.
+                                const file_path_copy = try self.tasks.items[self.task_table_ctx.row].file_path.clone();
+                                defer file_path_copy.deinit();
+
+                                try self.reload_tasks();
+
+                                // Try to find the same task to keep it selected.
+                                for (0..self.tasks.items.len) |i| {
+                                    if (std.mem.eql(u8, self.tasks.items[i].file_path.items, file_path_copy.items)) {
+                                        self.task_table_ctx.row = i;
+                                        break;
+                                    }
                                 }
                             }
 
