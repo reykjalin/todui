@@ -268,7 +268,11 @@ const TodoApp = struct {
         // YYYY-mm-dd should only have 10 characters, 6 more included for future proofing?
         // Obviously this should all work at least until the year 999999999. Obviously.
         var buf: [16]u8 = undefined;
-        const date_str = try std.fmt.bufPrint(&buf, "{d:0>4}-{d:0>2}-{d:0>2}", .{ @as(u32, @intCast(dt.year)), @intFromEnum(dt.month), dt.day });
+        var fbs = std.io.fixedBufferStream(&buf);
+        const writer = fbs.writer().any();
+
+        try dt.strftime(writer, "%Y-%m-%d");
+        const date_str = fbs.getWritten();
 
         // To make sure the hash is unique even if multiple files are completed per day we hash a
         // string consisting of "{file_name}{millisecond_timestamp}{task-title}".
