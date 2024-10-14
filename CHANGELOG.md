@@ -18,9 +18,9 @@ If another release is tagged in the same month I would add a patch number, such 
 * Task details - title, tags, and details - can be viewed.
 * Toggle the visibility of the tags column.
 * Reorder tasks in the task list.
+* View the tasks you've completed before, with the newest at the top.
 
 ### Known issues and missing features
 
-* You cannot view your completed tasks through the app.
 * No mouse support.
 * Multiple selections are not a thing yet.

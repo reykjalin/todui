@@ -25,12 +25,25 @@ The [`.todo` file specification](./SPECIFICATION.md) was created to fit this spe
 | <kbd>r</kbd> | Reload task list |
 | <kbd>f</kbd> | Open filter view |
 | <kbd>H</kbd> | Hide the tags column |
+| <kbd>tab</kbd> | Open completed task list view |
+
+### Completed Task List
+
+| <kbd>j</kbd> / <kbd>down</kbd> | Move selection down |
+| <kbd>k</kbd> / <kbd>up</kbd> | Move selection up|
+| <kbd>g</kbd> | Move selection to top |
+| <kbd>G</kbd> | Move selection to bottom |
+| <kbd>l</kbd> / <kbd>enter</kbd> | Open task details view for the selected task |
+| <kbd>r</kbd> | Reload task list |
+| <kbd>f</kbd> | Open filter view |
+| <kbd>H</kbd> | Hide the tags column |
+| <kbd>tab</kbd> | Open task list view |
 
 ### Task Details
 
 | Key | Action |
 |:---:|:---:|
-| <kbd>h</kbd> / <kbd>esc</kbd> | Go back to task list view |
+| <kbd>h</kbd> / <kbd>esc</kbd> | Go back to previous view |
 | <kbd>e</kbd> | Edit task |
 | <kbd>c</kbd> | Complete task |
 
