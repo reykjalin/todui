@@ -39,6 +39,11 @@ const Event = union(enum) {
     // is started
 };
 
+const TaskType = union(enum) {
+    ActiveTask,
+    CompletedTask,
+};
+
 const Task = struct {
     title: std.ArrayList(u8),
     /// All tags are currently stored as a single string.
@@ -47,7 +52,7 @@ const Task = struct {
     file_path: std.ArrayList(u8),
 };
 
-const Layout = union(enum) { TaskList, TaskDetails, TaskFilter };
+const Layout = union(enum) { TaskList, TaskDetails, TaskFilter, CompletedTasks };
 
 /// The application state
 const TodoApp = struct {
@@ -68,6 +73,8 @@ const TodoApp = struct {
     tasks: std.ArrayList(Task),
     /// Task table context.
     task_table_ctx: vaxis.widgets.Table.TableContext,
+    /// Completed tasks table context.
+    completed_task_table_ctx: vaxis.widgets.Table.TableContext,
     /// currently active layout.
     active_layout: Layout,
     /// Currently detailed task.
@@ -92,6 +99,16 @@ const TodoApp = struct {
             .tasks = std.ArrayList(Task).init(allocator),
             .task_table_ctx = .{
                 .active = true,
+                .col = 0,
+                .row = 0,
+                .selected_bg = .{ .rgb = .{ 50, 50, 50 } },
+                .row_bg_1 = .{ .rgb = .{ 0, 0, 0 } },
+                .row_bg_2 = .{ .rgb = .{ 0, 0, 0 } },
+                .hdr_bg_1 = .{ .rgb = .{ 0, 0, 0 } },
+                .hdr_bg_2 = .{ .rgb = .{ 0, 0, 0 } },
+            },
+            .completed_task_table_ctx = .{
+                .active = false,
                 .col = 0,
                 .row = 0,
                 .selected_bg = .{ .rgb = .{ 50, 50, 50 } },
@@ -228,8 +245,11 @@ const TodoApp = struct {
         return tasks;
     }
 
-    fn load_tasks(self: *TodoApp) !void {
-        const todo_folder_path = try get_todo_file_storage_path_caller_should_free(self.allocator);
+    fn load_tasks(self: *TodoApp, task_type: TaskType) !void {
+        const todo_folder_path = switch (task_type) {
+            .ActiveTask => try get_todo_file_storage_path_caller_should_free(self.allocator),
+            .CompletedTask => try get_completed_todo_file_storage_path_caller_should_free(self.allocator),
+        };
         defer self.allocator.free(todo_folder_path);
 
         self.tasks.clearAndFree();
@@ -253,9 +273,9 @@ const TodoApp = struct {
         self.tasks.clearRetainingCapacity();
     }
 
-    fn reload_tasks(self: *TodoApp) !void {
+    fn reload_tasks(self: *TodoApp, task_type: TaskType) !void {
         self.clear_tasks();
-        try self.load_tasks();
+        try self.load_tasks(task_type);
     }
 
     fn calculate_completed_task_file_name(self: *TodoApp, task: Task) ![]const u8 {
@@ -346,7 +366,7 @@ const TodoApp = struct {
         // NOTE: Not deferring a free here because `filter` will be moved back into the
         //       ArrayList when the filter is reapplied.
         const filter = try self.task_filter.toOwnedSlice();
-        try self.reload_tasks();
+        try self.reload_tasks(.ActiveTask);
 
         std.log.debug("Looking up the right index for task to complete after reloading all tasks", .{});
 
@@ -386,7 +406,7 @@ const TodoApp = struct {
         // Reapply the filter.
         self.task_filter = std.ArrayList(u8).fromOwnedSlice(self.allocator, filter);
 
-        try self.reload_tasks();
+        try self.reload_tasks(.ActiveTask);
 
         std.log.debug("End complete task", .{});
     }
@@ -419,7 +439,7 @@ const TodoApp = struct {
         // NOTE: Not deferring a free here because `filter` will be moved back into the
         //       ArrayList when the filter is reapplied.
         const filter = try self.task_filter.toOwnedSlice();
-        try self.reload_tasks();
+        try self.reload_tasks(.ActiveTask);
 
         // Get the storage path.
         const storage_path = try get_todo_file_storage_path_caller_should_free(self.allocator);
@@ -438,7 +458,7 @@ const TodoApp = struct {
         self.task_filter = std.ArrayList(u8).fromOwnedSlice(self.allocator, filter);
 
         // Once new task is created, reload all the tasks.
-        try self.reload_tasks();
+        try self.reload_tasks(.ActiveTask);
     }
 
     fn edit_task(self: *TodoApp, task: Task) !void {
@@ -449,7 +469,7 @@ const TodoApp = struct {
         try self.edit_file_path(task.file_path.items);
 
         // Reload the tasks after the edit session is done.
-        try self.reload_tasks();
+        try self.reload_tasks(.ActiveTask);
 
         // Set the active item to the same item we just finished editing.
         for (self.tasks.items) |t| {
@@ -475,7 +495,7 @@ const TodoApp = struct {
         // NOTE: Not deferring a free here because `filter` will be moved back into the
         //       ArrayList when the filter is reapplied.
         const filter = try self.task_filter.toOwnedSlice();
-        try self.reload_tasks();
+        try self.reload_tasks(.ActiveTask);
 
         // Use the end of the list as a temporary slot while swapping files.
         const tmp_idx = self.tasks.items.len;
@@ -486,7 +506,7 @@ const TodoApp = struct {
         self.task_filter = std.ArrayList(u8).fromOwnedSlice(self.allocator, filter);
 
         // Reload the tasks list so we get the right tasks to swap.
-        try self.reload_tasks();
+        try self.reload_tasks(.ActiveTask);
 
         // Get the tasks being swapped;
         var task_a = self.tasks.items[a_idx];
@@ -514,14 +534,14 @@ const TodoApp = struct {
         std.log.debug("Reloading tasks list", .{});
 
         // Reload the tasks list.
-        try self.reload_tasks();
+        try self.reload_tasks(.ActiveTask);
 
         std.log.debug("End swap tasks", .{});
     }
 
     pub fn run(self: *TodoApp) !void {
         // Load tasks. Loading early so I can log things.
-        try self.load_tasks();
+        try self.load_tasks(.ActiveTask);
 
         // Initialize our event loop. This particular loop requires intrusive init
         self.loop = .{
@@ -637,7 +657,7 @@ const TodoApp = struct {
 
                         // Reload list.
                         if (key.matches('r', .{})) {
-                            try self.reload_tasks();
+                            try self.reload_tasks(.ActiveTask);
                         }
 
                         // Complete a task.
@@ -666,6 +686,19 @@ const TodoApp = struct {
                         // Toggle the display of tags.
                         if (key.matches('H', .{})) {
                             self.should_show_tags_in_task_list = !self.should_show_tags_in_task_list;
+                        }
+
+                        // Switch to completed task view.
+                        if (key.matches(vaxis.Key.tab, .{})) {
+                            try self.reload_tasks(.CompletedTask);
+
+                            self.active_layout = .CompletedTasks;
+                            self.task_table_ctx.active = false;
+                            self.completed_task_table_ctx.active = true;
+
+                            if (self.completed_task_table_ctx.row >= self.tasks.items.len) {
+                                self.completed_task_table_ctx.row = self.tasks.items.len - 1;
+                            }
                         }
                     },
                     .TaskDetails => {
@@ -731,14 +764,14 @@ const TodoApp = struct {
                             self.vx.window().hideCursor();
 
                             if (self.tasks.items.len == 0) {
-                                try self.reload_tasks();
+                                try self.reload_tasks(.ActiveTask);
                             } else {
                                 // Get file path for current task to see if we can find the same task
                                 // after the list has been filtered.
                                 const file_path_copy = try self.tasks.items[self.task_table_ctx.row].file_path.clone();
                                 defer file_path_copy.deinit();
 
-                                try self.reload_tasks();
+                                try self.reload_tasks(.ActiveTask);
 
                                 // Try to find the same task to keep it selected.
                                 for (0..self.tasks.items.len) |i| {
@@ -755,6 +788,86 @@ const TodoApp = struct {
                             }
                         } else {
                             try self.task_filter_input.update(.{ .key_press = key });
+                        }
+                    },
+                    .CompletedTasks => {
+                        // Switch to task list view.
+                        if (key.matches(vaxis.Key.tab, .{})) {
+                            try self.reload_tasks(.ActiveTask);
+
+                            self.active_layout = .TaskList;
+                            self.task_table_ctx.active = true;
+                            self.completed_task_table_ctx.active = false;
+
+                            if (self.task_table_ctx.row >= self.tasks.items.len) {
+                                self.task_table_ctx.row = self.tasks.items.len - 1;
+                            }
+                        }
+
+                        // Movement
+                        if (key.matchesAny(&.{ vaxis.Key.up, 'k' }, .{})) {
+                            if (self.completed_task_table_ctx.row > 0) {
+                                self.completed_task_table_ctx.row -= 1;
+                            }
+                        }
+                        if (key.matchesAny(&.{ vaxis.Key.down, 'j' }, .{})) {
+                            if (self.completed_task_table_ctx.row < self.tasks.items.len) {
+                                self.completed_task_table_ctx.row += 1;
+                            }
+                        }
+                        if (key.matches('g', .{})) {
+                            self.completed_task_table_ctx.row = 0;
+                        }
+                        if (key.matches('G', .{})) {
+                            self.completed_task_table_ctx.row = self.tasks.items.len - 1;
+                        }
+
+                        // Move tasks down.
+                        if (key.matches('J', .{}) or key.matches(vaxis.Key.down, .{ .shift = true })) {
+                            try self.swap_tasks(self.completed_task_table_ctx.row, self.completed_task_table_ctx.row + 1);
+                            self.completed_task_table_ctx.row += 1;
+                        }
+                        // Move tasks up.
+                        if (key.matches('K', .{}) or key.matches(vaxis.Key.up, .{ .shift = true })) {
+                            if (self.completed_task_table_ctx.row > 0) {
+                                try self.swap_tasks(self.completed_task_table_ctx.row, self.completed_task_table_ctx.row - 1);
+                                self.completed_task_table_ctx.row -= 1;
+                            }
+                        }
+
+                        // Make sure the active table row never exceeds the number of tasks.
+                        if (self.tasks.items.len == 0) {
+                            self.completed_task_table_ctx.row = 0;
+                        } else if (self.completed_task_table_ctx.row >= self.tasks.items.len) {
+                            self.completed_task_table_ctx.row -= 1;
+                        }
+
+                        // Actions.
+
+                        // Open task details.
+                        if (key.matchesAny(&.{ vaxis.Key.enter, 'l' }, .{})) {
+                            self.active_layout = .TaskDetails;
+                            self.active_task = self.tasks.items[self.completed_task_table_ctx.row];
+
+                            // Disable mouse events so we can select text in the UI using the
+                            // terminal itself.
+                            // FIXME: Add custom mouse handling for selecting text. This should
+                            //        allow for nicer UI without mangling text that is copied.
+                            try self.vx.setMouseMode(self.tty.anyWriter(), false);
+                        }
+
+                        if (key.matches('r', .{})) {
+                            try self.reload_tasks(.CompletedTask);
+                        }
+
+                        // Start filter input.
+                        if (key.matches('f', .{})) {
+                            self.active_layout = .TaskFilter;
+                        }
+
+                        // Toggle the display of tags.
+                        if (key.matches('H', .{})) {
+                            self.should_show_tags_in_task_list = !self.should_show_tags_in_task_list;
                         }
                     },
                 }
@@ -787,6 +900,7 @@ const TodoApp = struct {
             .TaskList => try self.draw_task_list(),
             .TaskDetails => try self.draw_task_details(),
             .TaskFilter => try self.draw_task_filter(),
+            .CompletedTasks => try self.draw_completed_tasks(),
         }
     }
 
@@ -882,6 +996,37 @@ const TodoApp = struct {
         });
 
         self.task_filter_input.draw(input_container);
+    }
+
+    fn draw_completed_tasks(self: *TodoApp) !void {
+        // FIXME: We really want this to be a table for each date, bu that requires some
+        //        complicated UI that will take some time to build, hence this FIXME.
+        const draw_table_allocator = self.arena_allocator.allocator();
+
+        const TaskItem = struct { date: []const u8, title: []const u8, tags: []const u8 };
+        var completed_tasks = std.ArrayList(TaskItem).init(draw_table_allocator);
+
+        for (self.tasks.items) |task| {
+            const completion_date = std.fs.path.stem(task.file_path.items)[0..10];
+            const ct = TaskItem{
+                .title = task.title.items,
+                .tags = task.tags.items,
+                .date = completion_date,
+            };
+            try completed_tasks.append(ct);
+        }
+
+        const window = vaxis.widgets.border.all(self.vx.window(), .{});
+
+        // Completed tasks _should_ be ordered by the filesystem and ArrayList preserves
+        // insertion order so there should be no need to sort the map in any way. It should already
+        // have all the tasks in the right order.
+
+        if (self.should_show_tags_in_task_list) {
+            try vaxis.widgets.Table.drawTable(draw_table_allocator, window, &.{ "Date", "Tasks", "Tags" }, completed_tasks, &self.completed_task_table_ctx);
+        } else {
+            try vaxis.widgets.Table.drawTable(draw_table_allocator, window, &.{ "Date", "Tasks" }, completed_tasks, &self.completed_task_table_ctx);
+        }
     }
 };
 
