@@ -726,7 +726,11 @@ const TodoApp = struct {
                             }
 
                             if (key.matches('c', .{})) {
-                                try self.complete_task(self.task_table_ctx.row);
+                                const table_ctx = switch (self.active_layout.getLast()) {
+                                    .CompletedTasks => self.completed_task_table_ctx,
+                                    else => self.task_table_ctx,
+                                };
+                                try self.complete_task(table_ctx.row);
 
                                 _ = self.active_layout.pop();
                                 self.active_task = null;
@@ -961,8 +965,10 @@ const TodoApp = struct {
                 .height = .{ .limit = overlay.height - 2 },
             });
 
-            _ = try title_box.printSegment(.{ .text = task.title.items }, .{ .col_offset = (title_box.width / 2) - (task.title.items.len / 2) });
-            _ = try tags_box.printSegment(.{ .text = task.tags.items }, .{ .col_offset = (tags_box.width / 2) - (task.tags.items.len / 2) });
+            // FIXME: Need to make these scrollable in the case where they overflow the window.
+            //        Or, alternatively, manually wrap the text, if that's easier.
+            _ = try title_box.printSegment(.{ .text = task.title.items }, .{ .col_offset = (title_box.width / 2) -| (task.title.items.len / 2) });
+            _ = try tags_box.printSegment(.{ .text = task.tags.items }, .{ .col_offset = (tags_box.width / 2) -| (task.tags.items.len / 2) });
             _ = try details_box.printSegment(.{ .text = task.details.items }, .{});
         } else {
             unreachable;
