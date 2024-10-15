@@ -944,30 +944,36 @@ const TodoApp = struct {
 
             overlay.clear();
 
+            const title_to_width_ratio = task.title.items.len / win.width;
+
             const title_box = overlay.child(.{
                 .x_off = 0,
                 .y_off = 1,
                 .width = .{ .limit = overlay.width },
-                .height = .{ .limit = 1 },
+                .height = .{ .limit = title_to_width_ratio + 1 },
             });
 
             const tags_box = overlay.child(.{
                 .x_off = 0,
-                .y_off = 2,
+                .y_off = 2 + title_to_width_ratio,
                 .width = .{ .limit = overlay.width },
                 .height = .{ .limit = 1 },
             });
 
             const details_box = overlay.child(.{
                 .x_off = 0,
-                .y_off = 4,
+                .y_off = 3 + title_to_width_ratio + 1,
                 .width = .{ .limit = overlay.width },
                 .height = .{ .limit = overlay.height - 2 },
             });
 
-            // FIXME: Need to make these scrollable in the case where they overflow the window.
-            //        Or, alternatively, manually wrap the text, if that's easier.
-            _ = try title_box.printSegment(.{ .text = task.title.items }, .{ .col_offset = (title_box.width / 2) -| (task.title.items.len / 2) });
+            // If the title fits within the window width, center the title.
+            // Otherwise, left align it and make sure it wraps.
+            if (title_to_width_ratio == 0) {
+                _ = try title_box.printSegment(.{ .text = task.title.items }, .{ .col_offset = (title_box.width / 2) -| (task.title.items.len / 2) });
+            } else {
+                _ = try title_box.printSegment(.{ .text = task.title.items }, .{ .col_offset = 0 });
+            }
             _ = try tags_box.printSegment(.{ .text = task.tags.items }, .{ .col_offset = (tags_box.width / 2) -| (task.tags.items.len / 2) });
             _ = try details_box.printSegment(.{ .text = task.details.items }, .{});
         } else {
