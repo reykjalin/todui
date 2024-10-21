@@ -102,12 +102,10 @@ const TodoApp = struct {
     mouse: ?vaxis.Mouse,
     /// List of loaded tasks.
     tasks: std.ArrayList(Task),
-    /// Completed tasks table context.
-    completed_task_table_ctx: vaxis.widgets.Table.TableContext,
     /// currently active layout.
     active_layout: std.ArrayList(Layout),
-    /// Index of currently selected task in lists.
-    selected_task: usize,
+    /// Index of currently selected task in active task list.
+    selected_active_task: usize,
     /// The title input.
     task_filter_input: vaxis.widgets.TextInput,
     /// The task filter.
@@ -129,18 +127,8 @@ const TodoApp = struct {
             .loop = null,
             .mouse = null,
             .tasks = std.ArrayList(Task).init(allocator),
-            .completed_task_table_ctx = .{
-                .active = false,
-                .col = 0,
-                .row = 0,
-                .selected_bg = .{ .rgb = .{ 50, 50, 50 } },
-                .row_bg_1 = .{ .rgb = .{ 0, 0, 0 } },
-                .row_bg_2 = .{ .rgb = .{ 0, 0, 0 } },
-                .hdr_bg_1 = .{ .rgb = .{ 0, 0, 0 } },
-                .hdr_bg_2 = .{ .rgb = .{ 0, 0, 0 } },
-            },
             .active_layout = layout,
-            .selected_task = 0,
+            .selected_active_task = 0,
             .task_filter_input = vaxis.widgets.TextInput.init(allocator, &vx.unicode),
             .task_filter = std.ArrayList(u8).init(allocator),
             .should_show_tags_in_task_list = true,
@@ -503,7 +491,7 @@ const TodoApp = struct {
         // Set the selected task to the same item we just finished editing.
         for (self.tasks.items, 0..) |t, i| {
             if (std.mem.eql(u8, t.file_path.items, file_path_copy.items)) {
-                self.selected_task = i;
+                self.selected_active_task = i;
             }
         }
     }
@@ -637,8 +625,8 @@ const TodoApp = struct {
 
                             try self.active_layout.append(.TaskList);
 
-                            if (self.selected_task >= self.tasks.items.len) {
-                                self.selected_task = self.tasks.items.len -| 1;
+                            if (self.selected_active_task >= self.tasks.items.len) {
+                                self.selected_active_task = self.tasks.items.len -| 1;
                             }
                         }
                     },
@@ -648,15 +636,13 @@ const TodoApp = struct {
 
                             try self.active_layout.append(.CompletedTasks);
 
-                            if (self.tasks.items.len == 0) {
-                                self.completed_task_table_ctx.row = 0;
-                            } else if (self.completed_task_table_ctx.row >= self.tasks.items.len) {
-                                self.completed_task_table_ctx.row = self.tasks.items.len - 1;
+                            if (self.selected_active_task >= self.tasks.items.len) {
+                                self.selected_active_task = self.tasks.items.len -| 1;
                             }
                         }
                     },
                     .Task => |task_id| {
-                        self.selected_task = task_id;
+                        self.selected_active_task = task_id;
                         try self.active_layout.append(.TaskDetails);
                     },
                 }
@@ -680,34 +666,34 @@ const TodoApp = struct {
                     .TaskList => {
                         // Movement
                         if (key.matchesAny(&.{ vaxis.Key.up, 'k' }, .{})) {
-                            self.selected_task -|= 1;
+                            self.selected_active_task -|= 1;
                         }
                         if (key.matchesAny(&.{ vaxis.Key.down, 'j' }, .{})) {
-                            if (self.selected_task < self.tasks.items.len) {
-                                self.selected_task += 1;
+                            if (self.selected_active_task < self.tasks.items.len) {
+                                self.selected_active_task += 1;
                             }
                         }
                         if (key.matches('g', .{})) {
-                            self.selected_task = 0;
+                            self.selected_active_task = 0;
                         }
                         if (key.matches('G', .{})) {
-                            self.selected_task = self.tasks.items.len -| 1;
+                            self.selected_active_task = self.tasks.items.len -| 1;
                         }
 
                         // Move tasks down.
                         if (key.matches('J', .{}) or key.matches(vaxis.Key.down, .{ .shift = true })) {
-                            try self.swap_tasks(self.selected_task, self.selected_task + 1);
-                            self.selected_task += 1;
+                            try self.swap_tasks(self.selected_active_task, self.selected_active_task + 1);
+                            self.selected_active_task += 1;
                         }
                         // Move tasks up.
                         if (key.matches('K', .{}) or key.matches(vaxis.Key.up, .{ .shift = true })) {
-                            try self.swap_tasks(self.selected_task, self.selected_task -| 1);
-                            self.selected_task -|= 1;
+                            try self.swap_tasks(self.selected_active_task, self.selected_active_task -| 1);
+                            self.selected_active_task -|= 1;
                         }
 
                         // Make sure the active table row never exceeds the number of tasks.
-                        if (self.selected_task >= self.tasks.items.len) {
-                            self.selected_task = self.tasks.items.len -| 1;
+                        if (self.selected_active_task >= self.tasks.items.len) {
+                            self.selected_active_task = self.tasks.items.len -| 1;
                         }
 
                         // Actions.
@@ -724,12 +710,12 @@ const TodoApp = struct {
 
                         // Complete a task.
                         if (key.matches('c', .{})) {
-                            try self.complete_task(self.selected_task);
+                            try self.complete_task(self.selected_active_task);
                         }
 
                         // Edit task.
                         if (key.matches('e', .{})) {
-                            try self.edit_task(self.tasks.items[self.selected_task]);
+                            try self.edit_task(self.tasks.items[self.selected_active_task]);
                         }
 
                         // Create new task.
@@ -754,25 +740,21 @@ const TodoApp = struct {
                             try self.active_layout.append(.CompletedTasks);
 
                             if (self.tasks.items.len == 0) {
-                                self.completed_task_table_ctx.row = 0;
-                            } else if (self.completed_task_table_ctx.row >= self.tasks.items.len) {
-                                self.completed_task_table_ctx.row = self.tasks.items.len - 1;
+                                self.selected_active_task = 0;
+                            } else if (self.selected_active_task >= self.tasks.items.len) {
+                                self.selected_active_task = self.tasks.items.len - 1;
                             }
                         }
                     },
                     .TaskDetails => {
-                        const task = self.tasks.items[self.selected_task];
+                        const task = self.tasks.items[self.selected_active_task];
 
                         if (key.matchesAny(&.{ vaxis.Key.escape, 'h' }, .{})) {
                             _ = self.active_layout.pop();
                         }
 
                         if (key.matches('c', .{})) {
-                            const task_to_complete = switch (self.active_layout.getLast()) {
-                                .CompletedTasks => self.completed_task_table_ctx.row,
-                                else => self.selected_task,
-                            };
-                            try self.complete_task(task_to_complete);
+                            try self.complete_task(self.selected_active_task);
 
                             _ = self.active_layout.pop();
                         }
@@ -812,7 +794,7 @@ const TodoApp = struct {
                             } else {
                                 // Get file path for current task to see if we can find the same task
                                 // after the list has been filtered.
-                                const file_path_copy = try self.tasks.items[self.selected_task].file_path.clone();
+                                const file_path_copy = try self.tasks.items[self.selected_active_task].file_path.clone();
                                 defer file_path_copy.deinit();
 
                                 try self.reload_tasks(task_type);
@@ -820,18 +802,15 @@ const TodoApp = struct {
                                 // Try to find the same task to keep it selected.
                                 for (0..self.tasks.items.len) |i| {
                                     if (std.mem.eql(u8, self.tasks.items[i].file_path.items, file_path_copy.items)) {
-                                        self.selected_task = i;
+                                        self.selected_active_task = i;
                                         break;
                                     }
                                 }
                             }
 
                             // Make sure the selectd row isn't outside allowed bounds.
-                            if (self.selected_task >= self.tasks.items.len) {
-                                self.selected_task = self.tasks.items.len;
-                            }
-                            if (self.completed_task_table_ctx.row >= self.tasks.items.len) {
-                                self.completed_task_table_ctx.row = self.tasks.items.len;
+                            if (self.selected_active_task >= self.tasks.items.len) {
+                                self.selected_active_task = self.tasks.items.len;
                             }
                         } else {
                             try self.task_filter_input.update(.{ .key_press = key });
@@ -844,30 +823,30 @@ const TodoApp = struct {
 
                             try self.active_layout.append(.TaskList);
 
-                            if (self.selected_task >= self.tasks.items.len) {
-                                self.selected_task = self.tasks.items.len -| 1;
+                            if (self.selected_active_task >= self.tasks.items.len) {
+                                self.selected_active_task = self.tasks.items.len -| 1;
                             }
                         }
 
                         // Movement
                         if (key.matchesAny(&.{ vaxis.Key.up, 'k' }, .{})) {
-                            self.completed_task_table_ctx.row -|= 1;
+                            self.selected_active_task -|= 1;
                         }
                         if (key.matchesAny(&.{ vaxis.Key.down, 'j' }, .{})) {
-                            if (self.completed_task_table_ctx.row < self.tasks.items.len) {
-                                self.completed_task_table_ctx.row += 1;
+                            if (self.selected_active_task < self.tasks.items.len) {
+                                self.selected_active_task += 1;
                             }
                         }
                         if (key.matches('g', .{})) {
-                            self.completed_task_table_ctx.row = 0;
+                            self.selected_active_task = 0;
                         }
                         if (key.matches('G', .{})) {
-                            self.completed_task_table_ctx.row = self.tasks.items.len -| 1;
+                            self.selected_active_task = self.tasks.items.len -| 1;
                         }
 
                         // Make sure the active table row never exceeds the number of tasks.
-                        if (self.completed_task_table_ctx.row >= self.tasks.items.len) {
-                            self.completed_task_table_ctx.row = self.tasks.items.len -| 1;
+                        if (self.selected_active_task >= self.tasks.items.len) {
+                            self.selected_active_task = self.tasks.items.len -| 1;
                         }
 
                         // Actions.
@@ -876,7 +855,7 @@ const TodoApp = struct {
                         if (key.matchesAny(&.{ vaxis.Key.enter, 'l' }, .{})) {
                             try self.active_layout.append(.TaskDetails);
                             // FIXME: This should be removed after we convert the completed task list.
-                            self.selected_task = self.completed_task_table_ctx.row;
+                            self.selected_active_task = self.selected_active_task;
                         }
 
                         if (key.matches('r', .{})) {
@@ -899,8 +878,6 @@ const TodoApp = struct {
             .winsize => |ws| try self.vx.resize(self.allocator, self.tty.anyWriter(), ws),
             else => {},
         }
-
-        self.completed_task_table_ctx.active = self.active_layout.getLastOrNull() == .CompletedTasks;
     }
 
     /// Draw our current state
@@ -1083,7 +1060,7 @@ const TodoApp = struct {
             // Set the style for the row.
             const style: vaxis.Cell.Style = blk: {
                 // Active task always has a bright background.
-                if (self.selected_task == i) {
+                if (self.selected_active_task == i) {
                     break :blk active_style;
                 }
 
@@ -1159,7 +1136,7 @@ const TodoApp = struct {
         };
         _ = try close_button_box.printSegment(.{ .text = "[Close]", .style = style }, .{});
 
-        const task = self.tasks.items[self.selected_task];
+        const task = self.tasks.items[self.selected_active_task];
 
         const title_to_width_ratio = task.title.items.len / win.width;
 
@@ -1229,40 +1206,98 @@ const TodoApp = struct {
     }
 
     fn draw_completed_tasks(self: *TodoApp) !void {
-        try self.draw_title_bar();
-
-        // FIXME: We really want this to be a table for each date, bu that requires some
-        //        complicated UI that will take some time to build, hence this.
+        // FIXME: Draw tags.
         const draw_table_allocator = self.arena_allocator.allocator();
 
-        const TaskItem = struct { date: []const u8, title: []const u8, tags: []const u8 };
-        var completed_tasks = std.ArrayList(TaskItem).init(draw_table_allocator);
+        var task_list = std.ArrayList(struct { title: []const u8, tags: []const u8, file_path: []const u8 }).init(draw_table_allocator);
 
         for (self.tasks.items) |task| {
-            const completion_date = std.fs.path.stem(task.file_path.items)[0..10];
-            const ct = TaskItem{
-                .title = task.title.items,
-                .tags = task.tags.items,
-                .date = completion_date,
-            };
-            try completed_tasks.append(ct);
+            try task_list.append(.{ .title = task.title.items, .tags = task.tags.items, .file_path = task.file_path.items });
         }
 
-        const window = vaxis.widgets.border.all(self.vx.window().child(.{
-            .x_off = 0,
-            .y_off = 2,
-            .width = .{ .limit = self.vx.window().width },
-            .height = .{ .limit = self.vx.window().height - 2 },
-        }), .{});
+        try self.draw_title_bar();
 
-        // Completed tasks _should_ be ordered by the filesystem and ArrayList preserves
-        // insertion order so there should be no need to sort the map in any way. It should already
-        // have all the tasks in the right order.
+        const window = self.vx.window();
 
-        if (self.should_show_tags_in_task_list) {
-            try vaxis.widgets.Table.drawTable(draw_table_allocator, window, &.{ "Date", "Tasks", "Tags" }, completed_tasks, &self.completed_task_table_ctx);
-        } else {
-            try vaxis.widgets.Table.drawTable(draw_table_allocator, window, &.{ "Date", "Tasks" }, completed_tasks, &self.completed_task_table_ctx);
+        var y_off: usize = 3;
+        var last_date_str: [10]u8 = undefined;
+
+        for (task_list.items, 0..) |task, i| {
+            const date_str = std.fs.path.stem(task.file_path)[0..10];
+            if (!std.mem.eql(u8, date_str, &last_date_str)) {
+                y_off +|= 1;
+                const task_date_box = window.child(.{
+                    .x_off = 0,
+                    .y_off = y_off,
+                    .width = .{ .limit = window.width },
+                    .height = .{ .limit = 2 },
+                    .border = .{ .where = .bottom },
+                });
+                _ = try task_date_box.printSegment(.{ .text = date_str }, .{});
+                y_off +|= 2;
+
+                _ = try std.fmt.bufPrint(&last_date_str, "{s}", .{date_str});
+            }
+
+            // FIXME: Make sure we don't divide by zero.
+            var task_title_box = window.child(.{
+                .x_off = 0,
+                .y_off = y_off,
+                .width = .{ .limit = window.width },
+                .height = .{ .limit = 1 },
+            });
+            // First pass at printing to get the overflow result.
+            const print_result = try task_title_box.printSegment(.{ .text = task.title }, .{ .wrap = .word, .commit = false });
+
+            // Update the box if there was an overflow.
+            if (print_result.overflow) {
+                task_title_box = window.child(.{
+                    .x_off = 0,
+                    .y_off = y_off,
+                    .width = .{ .limit = window.width },
+                    .height = .{ .limit = print_result.row + 1 },
+                });
+            }
+
+            // Update the y offset based on the printed row offset.
+            y_off +|= print_result.row + 1;
+
+            // Process clicks.
+            if (task_title_box.hasMouse(self.mouse)) |mouse| {
+                // Use a pointer when hovering tasks.
+                self.vx.setMouseShape(.pointer);
+
+                switch (mouse.type) {
+                    .press => if (mouse.button == .left) {
+                        self.button_currently_down = .{ .Task = i };
+                    },
+                    .release => {
+                        if (self.button_currently_down.eql(.{ .Task = i })) {
+                            _ = self.loop.?.tryPostEvent(.{ .button_clicked = .{ .Task = i } });
+                        }
+
+                        self.button_currently_down = .None;
+                    },
+                    else => {},
+                }
+            }
+
+            // Set the style for the row.
+            const style: vaxis.Cell.Style = blk: {
+                // Active task always has a bright background.
+                if (self.selected_active_task == i) {
+                    break :blk active_style;
+                }
+
+                // Hovered tasks have a slightly faded background.
+                if (task_title_box.hasMouse(self.mouse)) |_| {
+                    break :blk hover_style;
+                } else {
+                    break :blk default_style;
+                }
+            };
+
+            _ = try task_title_box.printSegment(.{ .text = task.title, .style = style }, .{ .wrap = .word });
         }
     }
 };
