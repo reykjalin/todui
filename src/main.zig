@@ -627,6 +627,7 @@ const TodoApp = struct {
     pub fn update(self: *TodoApp, event: Event) !void {
         switch (event) {
             .button_clicked => |id| {
+                // FIXME: Cursor from filter view is not properly clicked when appropriate.
                 switch (id) {
                     .None => {},
                     .DetailsCloseButton => _ = self.active_layout.pop(),
