@@ -30,12 +30,16 @@ const active_style: vaxis.Cell.Style = .{ .fg = .default, .bg = .default, .rever
 const Button = union(enum) {
     None,
     DetailsCloseButton,
+    ActiveTasksButton,
+    CompletedTasksButton,
     Task: usize,
 
     fn eql(self: Button, other: Button) bool {
         switch (self) {
             .None => return other == .None,
             .DetailsCloseButton => return other == .DetailsCloseButton,
+            .ActiveTasksButton => return other == .ActiveTasksButton,
+            .CompletedTasksButton => return other == .CompletedTasksButton,
             .Task => |task_id| {
                 switch (other) {
                     .Task => |other_task_id| return task_id == other_task_id,
@@ -626,6 +630,30 @@ const TodoApp = struct {
                 switch (id) {
                     .None => {},
                     .DetailsCloseButton => _ = self.active_layout.pop(),
+                    .ActiveTasksButton => {
+                        if (self.active_layout.getLast() != .TaskList) {
+                            try self.reload_tasks(.ActiveTask);
+
+                            try self.active_layout.append(.TaskList);
+
+                            if (self.selected_task >= self.tasks.items.len) {
+                                self.selected_task = self.tasks.items.len -| 1;
+                            }
+                        }
+                    },
+                    .CompletedTasksButton => {
+                        if (self.active_layout.getLast() != .CompletedTasks) {
+                            try self.reload_tasks(.CompletedTask);
+
+                            try self.active_layout.append(.CompletedTasks);
+
+                            if (self.tasks.items.len == 0) {
+                                self.completed_task_table_ctx.row = 0;
+                            } else if (self.completed_task_table_ctx.row >= self.tasks.items.len) {
+                                self.completed_task_table_ctx.row = self.tasks.items.len - 1;
+                            }
+                        }
+                    },
                     .Task => |task_id| {
                         self.selected_task = task_id;
                         try self.active_layout.append(.TaskDetails);
@@ -813,7 +841,7 @@ const TodoApp = struct {
                         if (key.matches(vaxis.Key.tab, .{})) {
                             try self.reload_tasks(.ActiveTask);
 
-                            _ = self.active_layout.pop();
+                            try self.active_layout.append(.TaskList);
 
                             if (self.selected_task >= self.tasks.items.len) {
                                 self.selected_task = self.tasks.items.len -| 1;
@@ -925,11 +953,26 @@ const TodoApp = struct {
             .height = .{ .limit = 1 },
         });
 
-        const active_box_style: vaxis.Cell.Style = blk: {
-            if (active_button_box.hasMouse(self.mouse)) |_| {
-                self.vx.setMouseShape(.pointer);
-            }
+        // Process active_task_button_clicks.
+        if (active_button_box.hasMouse(self.mouse)) |mouse| {
+            self.vx.setMouseShape(.pointer);
 
+            switch (mouse.type) {
+                .press => if (mouse.button == .left) {
+                    self.button_currently_down = .ActiveTasksButton;
+                },
+                .release => {
+                    if (self.button_currently_down.eql(.ActiveTasksButton)) {
+                        _ = self.loop.?.tryPostEvent(.{ .button_clicked = .ActiveTasksButton });
+                    }
+                    self.button_currently_down = .None;
+                },
+                else => {},
+            }
+        }
+
+        // Get active_task_button style.
+        const active_box_style: vaxis.Cell.Style = blk: {
             if (self.active_layout.getLast() == .TaskList) break :blk active_style;
 
             if (active_button_box.hasMouse(self.mouse)) |mouse| {
@@ -942,11 +985,26 @@ const TodoApp = struct {
             }
         };
 
-        const completed_box_style: vaxis.Cell.Style = blk: {
-            if (completed_button_box.hasMouse(self.mouse)) |_| {
-                self.vx.setMouseShape(.pointer);
-            }
+        // Process completed_task_button_clicks.
+        if (completed_button_box.hasMouse(self.mouse)) |mouse| {
+            self.vx.setMouseShape(.pointer);
 
+            switch (mouse.type) {
+                .press => if (mouse.button == .left) {
+                    self.button_currently_down = .CompletedTasksButton;
+                },
+                .release => {
+                    if (self.button_currently_down.eql(.CompletedTasksButton)) {
+                        _ = self.loop.?.tryPostEvent(.{ .button_clicked = .CompletedTasksButton });
+                    }
+                    self.button_currently_down = .None;
+                },
+                else => {},
+            }
+        }
+
+        // Get completed_task_button style.
+        const completed_box_style: vaxis.Cell.Style = blk: {
             if (self.active_layout.getLast() == .CompletedTasks) break :blk active_style;
 
             if (completed_button_box.hasMouse(self.mouse)) |mouse| {
@@ -1137,7 +1195,7 @@ const TodoApp = struct {
     }
 
     fn draw_task_filter(self: *TodoApp) !void {
-        try self.draw_task_list();
+        try self.draw_title_bar();
 
         const win = self.vx.window();
         const overlay = win.child(.{
@@ -1170,6 +1228,8 @@ const TodoApp = struct {
     }
 
     fn draw_completed_tasks(self: *TodoApp) !void {
+        try self.draw_title_bar();
+
         // FIXME: We really want this to be a table for each date, bu that requires some
         //        complicated UI that will take some time to build, hence this.
         const draw_table_allocator = self.arena_allocator.allocator();
@@ -1187,7 +1247,12 @@ const TodoApp = struct {
             try completed_tasks.append(ct);
         }
 
-        const window = vaxis.widgets.border.all(self.vx.window(), .{});
+        const window = vaxis.widgets.border.all(self.vx.window().child(.{
+            .x_off = 0,
+            .y_off = 2,
+            .width = .{ .limit = self.vx.window().width },
+            .height = .{ .limit = self.vx.window().height - 2 },
+        }), .{});
 
         // Completed tasks _should_ be ordered by the filesystem and ArrayList preserves
         // insertion order so there should be no need to sort the map in any way. It should already
