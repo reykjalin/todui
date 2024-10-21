@@ -928,7 +928,7 @@ const TodoApp = struct {
 
             if (active_button_box.hasMouse(self.mouse)) |mouse| {
                 switch (mouse.type) {
-                    .press => break :blk active_style,
+                    .press => if (mouse.button == .left) break :blk active_style else break :blk hover_style,
                     else => break :blk hover_style,
                 }
             } else {
@@ -945,7 +945,7 @@ const TodoApp = struct {
 
             if (completed_button_box.hasMouse(self.mouse)) |mouse| {
                 switch (mouse.type) {
-                    .press => break :blk active_style,
+                    .press => if (mouse.button == .left) break :blk active_style else break :blk hover_style,
                     else => break :blk hover_style,
                 }
             } else {
@@ -1002,7 +1002,7 @@ const TodoApp = struct {
                 self.vx.setMouseShape(.pointer);
 
                 switch (mouse.type) {
-                    .press => {
+                    .press => if (mouse.button == .left) {
                         _ = self.loop.?.tryPostEvent(.{ .task_clicked = i });
                     },
                     else => {},
@@ -1057,7 +1057,9 @@ const TodoApp = struct {
                 self.vx.setMouseShape(.pointer);
 
                 switch (mouse.type) {
-                    .press => _ = self.loop.?.tryPostEvent(.{ .button_clicked = .DetailsCloseButton }),
+                    .press => if (mouse.button == .left) {
+                        _ = self.loop.?.tryPostEvent(.{ .button_clicked = .DetailsCloseButton });
+                    },
                     else => {},
                 }
 
