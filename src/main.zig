@@ -608,6 +608,9 @@ const TodoApp = struct {
             // Render the application to the screen
             try self.vx.render(buffered.writer().any());
             try buffered.flush();
+
+            // Clear the arena memory after every render loop.
+            _ = self.arena_allocator.reset(.retain_capacity);
         }
     }
 
