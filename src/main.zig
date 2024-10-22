@@ -1022,7 +1022,7 @@ const TodoApp = struct {
             var task_title_box = window.child(.{
                 .x_off = 0,
                 .y_off = y_off,
-                .width = .{ .limit = window.width },
+                .width = .{ .limit = @min(window.width, task.title.items.len + 1) },
                 .height = .{ .limit = 1 },
             });
             // First pass at printing to get the overflow result.
@@ -1246,7 +1246,7 @@ const TodoApp = struct {
             var task_title_box = window.child(.{
                 .x_off = 0,
                 .y_off = y_off,
-                .width = .{ .limit = window.width },
+                .width = .{ .limit = @min(window.width, task.title.len + 1) },
                 .height = .{ .limit = 1 },
             });
             // First pass at printing to get the overflow result.
