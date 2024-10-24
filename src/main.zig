@@ -27,12 +27,16 @@ const default_style: vaxis.Cell.Style = .{ .fg = .default, .bg = .default };
 const hover_style: vaxis.Cell.Style = .{ .fg = .default, .bg = .default, .reverse = true };
 const active_style: vaxis.Cell.Style = .{ .fg = .default, .bg = .default, .reverse = true };
 
+const TagId = usize;
+
 const Button = union(enum) {
     None,
     DetailsCloseButton,
     ActiveTasksButton,
     CompletedTasksButton,
-    Task: usize,
+    ClearFilterButton,
+    Task: TagId,
+    Tag: TagId,
 
     fn eql(self: Button, other: Button) bool {
         switch (self) {
@@ -40,9 +44,16 @@ const Button = union(enum) {
             .DetailsCloseButton => return other == .DetailsCloseButton,
             .ActiveTasksButton => return other == .ActiveTasksButton,
             .CompletedTasksButton => return other == .CompletedTasksButton,
+            .ClearFilterButton => return other == .ClearFilterButton,
             .Task => |task_id| {
                 switch (other) {
                     .Task => |other_task_id| return task_id == other_task_id,
+                    else => return false,
+                }
+            },
+            .Tag => |task_id| {
+                switch (other) {
+                    .Tag => |other_task_id| return task_id == other_task_id,
                     else => return false,
                 }
             },
@@ -644,9 +655,78 @@ const TodoApp = struct {
                             }
                         }
                     },
+                    .ClearFilterButton => {
+                        // Clear the filter.
+                        self.task_filter.clearRetainingCapacity();
+
+                        // Get the right type of task to load in.
+                        const task_type: TaskType = switch (self.active_layout.getLast()) {
+                            .CompletedTasks => .CompletedTask,
+                            else => .ActiveTask,
+                        };
+
+                        if (self.tasks.items.len == 0) {
+                            try self.reload_tasks(task_type);
+                        } else {
+                            // Get file path for current task to see if we can find the same task
+                            // after the list has been filtered.
+                            const file_path_copy = try self.tasks.items[self.selected_active_task].file_path.clone();
+                            defer file_path_copy.deinit();
+
+                            try self.reload_tasks(task_type);
+
+                            // Try to find the same task to keep it selected.
+                            for (0..self.tasks.items.len) |i| {
+                                if (std.mem.eql(u8, self.tasks.items[i].file_path.items, file_path_copy.items)) {
+                                    self.selected_active_task = i;
+                                    break;
+                                }
+                            }
+                        }
+
+                        // Make sure the selectd row isn't outside allowed bounds.
+                        if (self.selected_active_task >= self.tasks.items.len) {
+                            self.selected_active_task = self.tasks.items.len;
+                        }
+                    },
                     .Task => |task_id| {
                         self.selected_active_task = task_id;
                         try self.active_layout.append(.TaskDetails);
+                    },
+                    .Tag => |task_id| {
+                        // Reset and update the filter.
+                        self.task_filter.clearRetainingCapacity();
+                        try self.task_filter.appendSlice(self.tasks.items[task_id].tags.items);
+
+                        // Get the right type of task to load in.
+                        const task_type: TaskType = switch (self.active_layout.getLast()) {
+                            .CompletedTasks => .CompletedTask,
+                            else => .ActiveTask,
+                        };
+
+                        if (self.tasks.items.len == 0) {
+                            try self.reload_tasks(task_type);
+                        } else {
+                            // Get file path for current task to see if we can find the same task
+                            // after the list has been filtered.
+                            const file_path_copy = try self.tasks.items[self.selected_active_task].file_path.clone();
+                            defer file_path_copy.deinit();
+
+                            try self.reload_tasks(task_type);
+
+                            // Try to find the same task to keep it selected.
+                            for (0..self.tasks.items.len) |i| {
+                                if (std.mem.eql(u8, self.tasks.items[i].file_path.items, file_path_copy.items)) {
+                                    self.selected_active_task = i;
+                                    break;
+                                }
+                            }
+                        }
+
+                        // Make sure the selectd row isn't outside allowed bounds.
+                        if (self.selected_active_task >= self.tasks.items.len) {
+                            self.selected_active_task = self.tasks.items.len;
+                        }
                     },
                 }
             },
@@ -928,11 +1008,12 @@ const TodoApp = struct {
             .height = .{ .limit = 1 },
         });
         const completed_button_box = title_bar_box.child(.{
-            .x_off = 9,
+            .x_off = active_button_box.width + 1,
             .y_off = 1,
             .width = .{ .limit = 11 },
             .height = .{ .limit = 1 },
         });
+        const clear_filter_button_box = title_bar_box.child(.{ .x_off = active_button_box.width + completed_button_box.width + 2, .y_off = 1, .width = .{ .limit = "[Clear filter]".len }, .height = .{ .limit = 1 } });
 
         // Process active_task_button_clicks.
         if (active_button_box.hasMouse(self.mouse)) |mouse| {
@@ -998,8 +1079,39 @@ const TodoApp = struct {
             }
         };
 
+        // Process completed_task_button_clicks.
+        if (clear_filter_button_box.hasMouse(self.mouse)) |mouse| {
+            self.vx.setMouseShape(.pointer);
+
+            switch (mouse.type) {
+                .press => if (mouse.button == .left) {
+                    self.button_currently_down = .ClearFilterButton;
+                },
+                .release => {
+                    if (self.button_currently_down.eql(.ClearFilterButton)) {
+                        _ = self.loop.?.tryPostEvent(.{ .button_clicked = .ClearFilterButton });
+                    }
+                    self.button_currently_down = .None;
+                },
+                else => {},
+            }
+        }
+
+        // Get clear_filter_button style.
+        const clear_filter_box_style: vaxis.Cell.Style = blk: {
+            if (clear_filter_button_box.hasMouse(self.mouse)) |mouse| {
+                switch (mouse.type) {
+                    .press => if (mouse.button == .left) break :blk active_style else break :blk hover_style,
+                    else => break :blk hover_style,
+                }
+            } else {
+                break :blk default_style;
+            }
+        };
+
         _ = try active_button_box.printSegment(.{ .text = "[Active]", .style = active_box_style }, .{});
         _ = try completed_button_box.printSegment(.{ .text = "[Completed]", .style = completed_box_style }, .{});
+        _ = try clear_filter_button_box.printSegment(.{ .text = "[Clear filter]", .style = clear_filter_box_style }, .{});
     }
 
     fn draw_task_list(self: *TodoApp) !void {
@@ -1038,6 +1150,14 @@ const TodoApp = struct {
                 });
             }
 
+            // FIXME: Handle multiple tags better.
+            var task_tag_box = window.child(.{
+                .x_off = print_result.col + 2,
+                .y_off = y_off + print_result.row,
+                .width = .{ .limit = task.tags.items.len },
+                .height = .{ .limit = 1 },
+            });
+
             // Update the y offset based on the printed row offset.
             y_off +|= print_result.row + 1;
 
@@ -1060,6 +1180,25 @@ const TodoApp = struct {
                 }
             }
 
+            // Process tag clicks.
+            if (task_tag_box.hasMouse(self.mouse)) |mouse| {
+                // Use a pointer when hovering tasks.
+                self.vx.setMouseShape(.pointer);
+
+                switch (mouse.type) {
+                    .press => if (mouse.button == .left) {
+                        self.button_currently_down = .{ .Tag = i };
+                    },
+                    .release => {
+                        if (self.button_currently_down.eql(.{ .Tag = i })) {
+                            _ = self.loop.?.tryPostEvent(.{ .button_clicked = .{ .Tag = i } });
+                        }
+                        self.button_currently_down = .None;
+                    },
+                    else => {},
+                }
+            }
+
             // Set the style for the row.
             const style: vaxis.Cell.Style = blk: {
                 // Active task always has a bright background.
@@ -1075,7 +1214,16 @@ const TodoApp = struct {
                 }
             };
 
+            const tag_style: vaxis.Cell.Style = blk: {
+                if (task_tag_box.hasMouse(self.mouse)) |_| {
+                    break :blk .{ .fg = .{ .index = 5 }, .reverse = true };
+                }
+
+                break :blk .{ .fg = .{ .index = 5 } };
+            };
+
             _ = try task_title_box.printSegment(.{ .text = task.title.items, .style = style }, .{ .wrap = .word });
+            _ = try task_tag_box.printSegment(.{ .text = task.tags.items, .style = tag_style }, .{});
         }
     }
 
