@@ -3,7 +3,7 @@
 A filesystem based TUI app for managing todo lists.
 The [`.todo` file specification](./SPECIFICATION.md) was created to fit this specific implementation.
 
-![Todo TUI at commit hash `f685a6b9eb66224b8308db12948638819a1a56f8`](./screenshots/task-list-f685a6b9eb66224b8308db12948638819a1a56f8.webp)
+![Tuido task list at commit hash `a54d31b889781325677de1901731cd6b5e6b9aed`](./screenshots/task-list-a54d31b889781325677de1901731cd6b5e6b9aed.webp)
 
 
 ## Keybindings
@@ -62,3 +62,9 @@ Dependencies will automatically be fetched and built for your system.
 
 To make a release build run `zig build -Doptimize=ReleaseSafe`.
 You'll find the built release executable in `./zig-out/bin/todo`.
+
+## Screenshots
+
+![Tuido task list at commit hash `a54d31b889781325677de1901731cd6b5e6b9aed`](./screenshots/task-list-a54d31b889781325677de1901731cd6b5e6b9aed.webp)
+![Tuido completed tasks at commit hash `a54d31b889781325677de1901731cd6b5e6b9aed`](./screenshots/completed-tasks-a54d31b889781325677de1901731cd6b5e6b9aed.webp)
+![Tuido task details at commit hash `a54d31b889781325677de1901731cd6b5e6b9aed`](./screenshots/task-details-a54d31b889781325677de1901731cd6b5e6b9aed.webp)
