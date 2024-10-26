@@ -31,6 +31,8 @@ The TUI is fully mouse aware so you can use both the keybindings listed below or
 
 ### Completed Task List
 
+| Key | Action |
+|:---:|:---:|
 | <kbd>j</kbd> / <kbd>down</kbd> | Move selection down |
 | <kbd>k</kbd> / <kbd>up</kbd> | Move selection up|
 | <kbd>g</kbd> | Move selection to top |
