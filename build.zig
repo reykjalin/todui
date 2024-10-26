@@ -31,7 +31,7 @@ pub fn build(b: *std.Build) void {
     });
 
     const exe = b.addExecutable(.{
-        .name = "todo",
+        .name = "tuido",
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
