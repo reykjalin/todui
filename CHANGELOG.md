@@ -19,8 +19,8 @@ If another release is tagged in the same month I would add a patch number, such 
 * Toggle the visibility of the tags column.
 * Reorder tasks in the task list.
 * View the tasks you've completed before, with the newest at the top.
+* Full mouse support for most actions.
 
 ### Known issues and missing features
 
-* No mouse support.
 * Multiple selections are not a thing yet.

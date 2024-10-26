@@ -1,7 +1,9 @@
-# Todo
+# Tuido
 
 A filesystem based TUI app for managing todo lists.
 The [`.todo` file specification](./SPECIFICATION.md) was created to fit this specific implementation.
+
+The TUI is fully mouse aware so you can use both the keybindings listed below or the mouse to navigate the TUI.
 
 ![Tuido task list at commit hash `a54d31b889781325677de1901731cd6b5e6b9aed`](./screenshots/task-list-a54d31b889781325677de1901731cd6b5e6b9aed.webp)
 
