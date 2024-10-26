@@ -24,3 +24,4 @@ If another release is tagged in the same month I would add a patch number, such 
 ### Known issues and missing features
 
 * Multiple selections are not a thing yet.
+* Scrolling in long task lists has not been implemented.
