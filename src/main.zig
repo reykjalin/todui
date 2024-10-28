@@ -988,7 +988,7 @@ const TodoApp = struct {
 
         const title_box = title_bar_box.child(.{ .x_off = 0, .y_off = 0, .width = .{ .limit = 5 }, .height = .{ .limit = 1 } });
 
-        _ = try title_box.printSegment(.{ .text = "TUIDO" }, .{});
+        _ = try title_box.printSegment(.{ .text = "TODUI" }, .{});
 
         const active_button_box = title_bar_box.child(.{
             .x_off = 0,

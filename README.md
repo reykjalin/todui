@@ -1,11 +1,11 @@
-# Tuido
+# Todui
 
 A filesystem based TUI app for managing todo lists.
 The [`.todo` file specification](./SPECIFICATION.md) was created to fit this specific implementation.
 
 The TUI is fully mouse aware so you can use both the keybindings listed below or the mouse to navigate the TUI.
 
-![Tuido task list at commit hash `a54d31b889781325677de1901731cd6b5e6b9aed`](./screenshots/task-list-a54d31b889781325677de1901731cd6b5e6b9aed.webp)
+![Todui task list at commit hash `a54d31b889781325677de1901731cd6b5e6b9aed`](./screenshots/task-list-a54d31b889781325677de1901731cd6b5e6b9aed.webp)
 
 
 ## Keybindings
@@ -65,10 +65,10 @@ To build, simply download Zig and run `zig build run`.
 Dependencies will automatically be fetched and built for your system.
 
 To make a release build run `zig build -Doptimize=ReleaseSafe`.
-You'll find the built release executable in `./zig-out/bin/todo`.
+You'll find the built release executable in `./zig-out/bin/todui`.
 
 ## Screenshots
 
-![Tuido task list at commit hash `a54d31b889781325677de1901731cd6b5e6b9aed`](./screenshots/task-list-a54d31b889781325677de1901731cd6b5e6b9aed.webp)
-![Tuido completed tasks at commit hash `a54d31b889781325677de1901731cd6b5e6b9aed`](./screenshots/completed-tasks-a54d31b889781325677de1901731cd6b5e6b9aed.webp)
-![Tuido task details at commit hash `a54d31b889781325677de1901731cd6b5e6b9aed`](./screenshots/task-details-a54d31b889781325677de1901731cd6b5e6b9aed.webp)
+![Todui task list at commit hash `a54d31b889781325677de1901731cd6b5e6b9aed`](./screenshots/task-list-a54d31b889781325677de1901731cd6b5e6b9aed.webp)
+![Todui completed tasks at commit hash `a54d31b889781325677de1901731cd6b5e6b9aed`](./screenshots/completed-tasks-a54d31b889781325677de1901731cd6b5e6b9aed.webp)
+![Todui task details at commit hash `a54d31b889781325677de1901731cd6b5e6b9aed`](./screenshots/task-details-a54d31b889781325677de1901731cd6b5e6b9aed.webp)
