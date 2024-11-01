@@ -24,8 +24,8 @@
     // internet connectivity.
     .dependencies = .{
         .vaxis = .{
-            .url = "https://github.com/rockorager/libvaxis/archive/refs/tags/v0.4.1.tar.gz",
-            .hash = "1220523a3a301cbfbd83a374e2a69073fa14b211f2f6aaa4fc9497c936feaa67f738",
+            .url = "https://github.com/rockorager/libvaxis/archive/refs/tags/v0.5.0.tar.gz",
+            .hash = "122059b9c45b26d5a256124b545b12af374840751a930bafba5f49a5f587f52e0434",
         },
         .@"known-folders" = .{
             .url = "git+https://github.com/ziglibs/known-folders.git#1cceeb70e77dec941a4178160ff6c8d05a74de6f",
