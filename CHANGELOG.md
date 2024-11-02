@@ -4,6 +4,22 @@ Version scheme is `<year>.<month>.<patch>`, where the `<patch>` may be unused.
 For example, the first release in a given month will usually be `<year>.<month>`, e.g. `2024.10`.
 If another release is tagged in the same month I would add a patch number, such as `2024.10.1`.
 
+## 2024.11
+
+### Features
+
+* Scrolling in the active and complete task list 🎉.
+
+### Known issues and missing features
+
+* Multiple selections are not a thing yet.
+* The currently active filter is not displayed.
+* The scrollbar doesn't always scroll all the way down, sometimes there
+  is a 1 cell gap between the scrollbar and the scroll down button.
+* Selecting a task to view details or completing it after scrolling will
+  select the wrong task.
+
+
 ## 2024.10
 
 ### Features
@@ -25,3 +41,4 @@ If another release is tagged in the same month I would add a patch number, such 
 
 * Multiple selections are not a thing yet.
 * Scrolling in long task lists has not been implemented.
+* The currently active filter is not displayed.
