@@ -35,6 +35,8 @@ const Button = union(enum) {
     ActiveTasksButton,
     CompletedTasksButton,
     ClearFilterButton,
+    ScrollUp,
+    ScrollDown,
     Task: TagId,
     Tag: TagId,
 
@@ -45,6 +47,8 @@ const Button = union(enum) {
             .ActiveTasksButton => return other == .ActiveTasksButton,
             .CompletedTasksButton => return other == .CompletedTasksButton,
             .ClearFilterButton => return other == .ClearFilterButton,
+            .ScrollUp => return other == .ScrollUp,
+            .ScrollDown => return other == .ScrollDown,
             .Task => |task_id| {
                 switch (other) {
                     .Task => |other_task_id| return task_id == other_task_id,
@@ -124,6 +128,7 @@ const TodoApp = struct {
     /// Indicates whether the tags should be displayed.
     should_show_tags_in_task_list: bool,
     button_currently_down: Button,
+    scroll_offset: usize,
 
     pub fn init(allocator: std.mem.Allocator) !TodoApp {
         var vx = try vaxis.init(allocator, .{});
@@ -144,6 +149,7 @@ const TodoApp = struct {
             .task_filter = std.ArrayList(u8).init(allocator),
             .should_show_tags_in_task_list = true,
             .button_currently_down = .None,
+            .scroll_offset = 0,
         };
     }
 
@@ -631,6 +637,75 @@ const TodoApp = struct {
         }
     }
 
+    fn get_completed_tasks_draw_height(self: *TodoApp) !usize {
+        // FIXME: This doesn't account for text wrapping.
+
+        var last_date_str: [10]u8 = undefined;
+        var number_of_dates: usize = 1;
+
+        // Count the number of different dates.
+        for (self.tasks.items) |task| {
+            const date_str = std.fs.path.stem(task.file_path.items)[0..10];
+            if (!std.mem.eql(u8, date_str, &last_date_str)) {
+                number_of_dates += 1;
+
+                // Update last_date_str.
+                _ = try std.fmt.bufPrint(&last_date_str, "{s}", .{date_str});
+            }
+        }
+
+        // Each new date adds 3 rows, and thus:
+        // draw_height = (3 * number_of_dates) + number_of_tasks.
+        // FIXME: We might technically overflow usize here.
+        return (3 * number_of_dates) + self.tasks.items.len;
+    }
+
+    fn scroll_up(self: *TodoApp) void {
+        const active_layout = self.active_layout.getLast();
+
+        if (active_layout == .TaskList) {
+            // Window height - 4 because we need to account for the app header.
+            // If the tasks fit within the window, there is no need to scroll.
+            const active_task_list_height = self.vx.window().height - 4;
+            if (self.tasks.items.len < active_task_list_height) {
+                return;
+            }
+
+            self.scroll_offset -|= 1;
+        } else if (active_layout == .CompletedTasks) {
+            // FIXME: Don't allow overscroll.
+            self.scroll_offset -|= 1;
+        }
+    }
+
+    fn scroll_down(self: *TodoApp) !void {
+        const active_layout = self.active_layout.getLast();
+
+        // Window height - 4 because we need to account for the app header.
+        const available_height_for_tasks = self.vx.window().height - 4;
+
+        if (active_layout == .TaskList) {
+            // If the tasks fit within the window, there is no need to scroll.
+            const max_allowed_offset = self.tasks.items.len -| available_height_for_tasks;
+            if (self.scroll_offset >= max_allowed_offset) {
+                return;
+            }
+
+            if (self.tasks.items.len < available_height_for_tasks) {
+                return;
+            }
+
+            self.scroll_offset += 1;
+        } else if (active_layout == .CompletedTasks) {
+            const max_allowed_offset = try self.get_completed_tasks_draw_height() -| available_height_for_tasks;
+            if (self.scroll_offset >= max_allowed_offset) {
+                return;
+            }
+
+            self.scroll_offset += 1;
+        }
+    }
+
     /// Update our application state from an event
     pub fn update(self: *TodoApp, event: Event) !void {
         switch (event) {
@@ -641,6 +716,9 @@ const TodoApp = struct {
                     .DetailsCloseButton => _ = self.active_layout.pop(),
                     .ActiveTasksButton => {
                         if (self.active_layout.getLast() != .TaskList) {
+                            // Reset scroll.
+                            self.scroll_offset = 0;
+
                             try self.reload_tasks(.ActiveTask);
 
                             try self.active_layout.append(.TaskList);
@@ -652,6 +730,9 @@ const TodoApp = struct {
                     },
                     .CompletedTasksButton => {
                         if (self.active_layout.getLast() != .CompletedTasks) {
+                            // Reset scroll.
+                            self.scroll_offset = 0;
+
                             try self.reload_tasks(.CompletedTask);
 
                             try self.active_layout.append(.CompletedTasks);
@@ -662,6 +743,9 @@ const TodoApp = struct {
                         }
                     },
                     .ClearFilterButton => {
+                        // Reset scroll.
+                        self.scroll_offset = 0;
+
                         // Clear the filter.
                         self.task_filter.clearRetainingCapacity();
 
@@ -684,11 +768,16 @@ const TodoApp = struct {
 
                         self.selected_active_task = 0;
                     },
+                    .ScrollUp => self.scroll_up(),
+                    .ScrollDown => try self.scroll_down(),
                     .Task => |task_id| {
                         self.selected_active_task = task_id;
                         try self.active_layout.append(.TaskDetails);
                     },
                     .Tag => |task_id| {
+                        // Reset scroll.
+                        self.scroll_offset = 0;
+
                         // Reset and update the filter.
                         self.task_filter.clearRetainingCapacity();
                         try self.task_filter.appendSlice(self.tasks.items[task_id].tags.items);
@@ -817,6 +906,9 @@ const TodoApp = struct {
 
                             try self.active_layout.append(.CompletedTasks);
 
+                            // Reset scroll.
+                            self.scroll_offset = 0;
+
                             if (self.tasks.items.len == 0) {
                                 self.selected_active_task = 0;
                             } else if (self.selected_active_task >= self.tasks.items.len) {
@@ -843,6 +935,9 @@ const TodoApp = struct {
                     },
                     .TaskFilter => {
                         if (key.matches(vaxis.Key.enter, .{})) {
+                            // Reset scroll.
+                            self.scroll_offset = 0;
+
                             // Reset the current filter.
                             self.task_filter.clearRetainingCapacity();
 
@@ -901,6 +996,9 @@ const TodoApp = struct {
 
                             try self.active_layout.append(.TaskList);
 
+                            // Reset scroll.
+                            self.scroll_offset = 0;
+
                             if (self.selected_active_task >= self.tasks.items.len) {
                                 self.selected_active_task = self.tasks.items.len -| 1;
                             }
@@ -952,7 +1050,15 @@ const TodoApp = struct {
                     },
                 }
             },
-            .mouse => |mouse| self.mouse = mouse,
+            .mouse => |mouse| {
+                self.mouse = mouse;
+
+                switch (mouse.button) {
+                    .wheel_up => self.scroll_up(),
+                    .wheel_down => try self.scroll_down(),
+                    else => {},
+                }
+            },
             .winsize => |ws| try self.vx.resize(self.allocator, self.tty.anyWriter(), ws),
             else => {},
         }
@@ -973,11 +1079,179 @@ const TodoApp = struct {
         // be changing that as well
         self.vx.setMouseShape(.default);
 
+        // Draw scrollbars first.
+        try self.draw_scroll_bars();
+
         switch (self.active_layout.getLast()) {
             .TaskList => try self.draw_task_list(),
             .TaskDetails => try self.draw_task_details(),
             .TaskFilter => try self.draw_task_filter(),
             .CompletedTasks => try self.draw_completed_tasks(),
+        }
+    }
+
+    fn draw_scroll_bars(self: *TodoApp) !void {
+        const win = self.vx.window();
+
+        const can_scroll = can_scroll: {
+            const active_layout = self.active_layout.getLast();
+
+            // Available height = window_height - title_bar_height.
+            const available_height_for_tasks = win.height - 3;
+
+            if (active_layout == .TaskList) {
+                // Scrolling can only happen when the number of tasks exceeds the available
+                // height.
+                if (self.tasks.items.len > available_height_for_tasks) {
+                    break :can_scroll true;
+                }
+            } else if (active_layout == .CompletedTasks) {
+                if (try self.get_completed_tasks_draw_height() > available_height_for_tasks) {
+                    break :can_scroll true;
+                }
+            }
+
+            // We only allow scrolling for the active and completed task lists.
+            break :can_scroll false;
+        };
+
+        // Draw the borders marking the dimensions of the scroll bar.
+        // _ = win.child(.{
+        //     .x_off = win.width - 2,
+        //     .y_off = 3,
+        //     .width = .{ .limit = 3 },
+        //     .height = .{ .limit = win.height - 3 },
+        //     .border = .{ .where = .{ .other = .{ .left = true, .right = true } } },
+        // });
+
+        // Draw container bar.
+        // _ = win.child(.{
+        //     .x_off = win.width - 3,
+        //     .y_off = 6,
+        //     .width = .{ .limit = 3 },
+        //     .height = .{ .limit = win.height - 9 },
+        //     .border = .{ .where = .left },
+        // });
+
+        // Draw scroll up button.
+        const up_button = win.child(.{
+            .x_off = win.width - 1,
+            .y_off = 3,
+            .width = .{ .limit = 1 },
+            .height = .{ .limit = 1 },
+            // .border = .{ .where = .bottom },
+        });
+
+        // Process clicks.
+        if (up_button.hasMouse(self.mouse)) |mouse| {
+            // If we can't scroll, disable the button.
+            if (can_scroll) {
+                switch (mouse.type) {
+                    .press => if (mouse.button == .left) {
+                        self.button_currently_down = .ScrollUp;
+                    },
+                    .release => {
+                        if (self.button_currently_down.eql(.ScrollUp)) {
+                            _ = self.loop.?.tryPostEvent(.{ .button_clicked = .ScrollUp });
+                        }
+
+                        self.button_currently_down = .None;
+                    },
+                    else => {},
+                }
+            }
+        }
+
+        // Get button and mouse style.
+        const up_button_style = up_style: {
+            // If we can't scroll, disable the button.
+            if (!can_scroll) {
+                break :up_style default_style;
+            }
+
+            if (up_button.hasMouse(self.mouse)) |_| {
+                self.vx.setMouseShape(.pointer);
+
+                break :up_style hover_style;
+            }
+            break :up_style default_style;
+        };
+
+        _ = try up_button.printSegment(.{ .text = "\u{2191}", .style = up_button_style }, .{});
+
+        // Draw scroll down button.
+        const down_button = win.child(.{
+            .x_off = win.width - 1,
+            .y_off = win.height - 1,
+            .width = .{ .limit = 1 },
+            .height = .{ .limit = 1 },
+        });
+
+        // Process clicks.
+        if (down_button.hasMouse(self.mouse)) |mouse| {
+            // If we can't scroll, disable the button.
+            if (can_scroll) {
+                switch (mouse.type) {
+                    .press => if (mouse.button == .left) {
+                        self.button_currently_down = .ScrollDown;
+                    },
+                    .release => {
+                        if (self.button_currently_down.eql(.ScrollDown)) {
+                            _ = self.loop.?.tryPostEvent(.{ .button_clicked = .ScrollDown });
+                        }
+
+                        self.button_currently_down = .None;
+                    },
+                    else => {},
+                }
+            }
+        }
+
+        // Get up button and mouse style.
+        const down_button_style = down_style: {
+            // If we can't scroll, disable the button.
+            if (!can_scroll) {
+                break :down_style default_style;
+            }
+
+            if (down_button.hasMouse(self.mouse)) |_| {
+                self.vx.setMouseShape(.pointer);
+
+                break :down_style hover_style;
+            }
+            break :down_style default_style;
+        };
+
+        _ = try down_button.printSegment(.{ .text = "\u{2193}", .style = down_button_style }, .{});
+
+        // Draw movable plane in scrollbar for scrolling, if we actually can scroll.
+        if (can_scroll) {
+            // Available height = window_height - title_bar_height - up_button_height - down_button_height.
+            const available_height_for_scroll_pane = @as(f64, @floatFromInt(win.height - 3 - 1 - 1));
+            // Available height = window_height - title_bar_height.
+            const available_height_for_tasks = @as(f64, @floatFromInt(win.height - 3));
+
+            const task_draw_height_f = switch (self.active_layout.getLast()) {
+                .TaskList => @as(f64, @floatFromInt(self.tasks.items.len)),
+                .CompletedTasks => @as(f64, @floatFromInt(try self.get_completed_tasks_draw_height())),
+                else => unreachable,
+            };
+
+            // Get pane height, converted back to usize so we know what height to use.
+            const pane_height = @as(usize, @intFromFloat((available_height_for_tasks / task_draw_height_f) * available_height_for_scroll_pane));
+
+            const scroll_offset_f = @as(f64, @floatFromInt(self.scroll_offset));
+
+            const pane_offset = @as(usize, @intFromFloat((available_height_for_scroll_pane / task_draw_height_f) * scroll_offset_f));
+
+            const plane = win.child(.{
+                .x_off = win.width - 1,
+                .y_off = 4 + pane_offset,
+                .width = .{ .limit = 1 },
+                .height = .{ .limit = @max(pane_height, 1) }, // Make sure height is always at least 1 cell.
+            });
+
+            plane.fill(.{ .style = .{ .fg = .default, .reverse = true } });
         }
     }
 
@@ -1110,21 +1384,18 @@ const TodoApp = struct {
     }
 
     fn draw_task_list(self: *TodoApp) !void {
-        // FIXME: Draw tags.
-        const draw_table_allocator = self.arena_allocator.allocator();
-
-        var task_list = std.ArrayList(struct { title: []const u8, tags: []const u8 }).init(draw_table_allocator);
-
-        for (self.tasks.items) |task| {
-            try task_list.append(.{ .title = task.title.items, .tags = task.tags.items });
-        }
-
         try self.draw_title_bar();
 
-        const window = self.vx.window();
+        // Make sure there's space for the scroll-bar.
+        const window = self.vx.window().child(.{
+            .x_off = 0,
+            .y_off = 0,
+            .width = .{ .limit = self.vx.window().width - 2 },
+            .height = .{ .limit = self.vx.window().height },
+        });
 
         var y_off: usize = 3;
-        for (self.tasks.items, 0..) |task, i| {
+        for (self.tasks.items[self.scroll_offset..self.tasks.items.len], 0..) |task, i| {
             // FIXME: Make sure we don't divide by zero.
             var task_title_box = window.child(.{
                 .x_off = 0,
@@ -1352,18 +1623,23 @@ const TodoApp = struct {
     }
 
     fn draw_completed_tasks(self: *TodoApp) !void {
-        // FIXME: Draw tags.
         const draw_table_allocator = self.arena_allocator.allocator();
 
         var task_list = std.ArrayList(struct { title: []const u8, tags: []const u8, file_path: []const u8 }).init(draw_table_allocator);
 
-        for (self.tasks.items) |task| {
+        for (self.tasks.items[0..self.tasks.items.len]) |task| {
             try task_list.append(.{ .title = task.title.items, .tags = task.tags.items, .file_path = task.file_path.items });
         }
 
         try self.draw_title_bar();
 
-        const window = self.vx.window();
+        // Make sure there's space for the scroll-bar.
+        const window = self.vx.window().child(.{
+            .x_off = 0,
+            .y_off = 0,
+            .width = .{ .limit = self.vx.window().width - 2 },
+            .height = .{ .limit = self.vx.window().height },
+        });
 
         var y_off: usize = 3;
         var last_date_str: [10]u8 = undefined;
@@ -1372,23 +1648,27 @@ const TodoApp = struct {
             const date_str = std.fs.path.stem(task.file_path)[0..10];
             if (!std.mem.eql(u8, date_str, &last_date_str)) {
                 y_off +|= 1;
-                const task_date_box = window.child(.{
-                    .x_off = 0,
-                    .y_off = y_off,
-                    .width = .{ .limit = window.width },
-                    .height = .{ .limit = 2 },
-                    .border = .{ .where = .bottom },
-                });
-                _ = try task_date_box.printSegment(.{ .text = date_str }, .{});
+
+                // Only draw if we've hit the scroll offset.
+                if (y_off -| 3 >= self.scroll_offset) {
+                    const task_date_box = window.child(.{
+                        .x_off = 0,
+                        .y_off = y_off -| self.scroll_offset,
+                        .width = .{ .limit = window.width },
+                        .height = .{ .limit = 2 },
+                        .border = .{ .where = .bottom },
+                    });
+                    _ = try task_date_box.printSegment(.{ .text = date_str }, .{});
+                }
+
                 y_off +|= 2;
 
                 _ = try std.fmt.bufPrint(&last_date_str, "{s}", .{date_str});
             }
 
-            // FIXME: Make sure we don't divide by zero.
             var task_title_box = window.child(.{
                 .x_off = 0,
-                .y_off = y_off,
+                .y_off = y_off -| self.scroll_offset,
                 .width = .{ .limit = @min(window.width, task.title.len + 1) },
                 .height = .{ .limit = 1 },
             });
@@ -1399,7 +1679,7 @@ const TodoApp = struct {
             if (print_result.overflow) {
                 task_title_box = window.child(.{
                     .x_off = 0,
-                    .y_off = y_off,
+                    .y_off = y_off -| self.scroll_offset,
                     .width = .{ .limit = window.width },
                     .height = .{ .limit = print_result.row + 1 },
                 });
@@ -1408,7 +1688,7 @@ const TodoApp = struct {
             // FIXME: Handle multiple tags better.
             const task_tag_box = window.child(.{
                 .x_off = print_result.col + 2,
-                .y_off = y_off + print_result.row,
+                .y_off = y_off + print_result.row -| self.scroll_offset,
                 .width = .{ .limit = task.tags.len },
                 .height = .{ .limit = 1 },
             });
@@ -1416,42 +1696,45 @@ const TodoApp = struct {
             // Update the y offset based on the printed row offset.
             y_off +|= print_result.row + 1;
 
-            // Process clicks.
-            if (task_title_box.hasMouse(self.mouse)) |mouse| {
-                // Use a pointer when hovering tasks.
-                self.vx.setMouseShape(.pointer);
+            // Only process clicks if we've hit the scroll offset.
+            if (y_off -| 3 >= self.scroll_offset) {
+                // Process clicks.
+                if (task_title_box.hasMouse(self.mouse)) |mouse| {
+                    // Use a pointer when hovering tasks.
+                    self.vx.setMouseShape(.pointer);
 
-                switch (mouse.type) {
-                    .press => if (mouse.button == .left) {
-                        self.button_currently_down = .{ .Task = i };
-                    },
-                    .release => {
-                        if (self.button_currently_down.eql(.{ .Task = i })) {
-                            _ = self.loop.?.tryPostEvent(.{ .button_clicked = .{ .Task = i } });
-                        }
+                    switch (mouse.type) {
+                        .press => if (mouse.button == .left) {
+                            self.button_currently_down = .{ .Task = i };
+                        },
+                        .release => {
+                            if (self.button_currently_down.eql(.{ .Task = i })) {
+                                _ = self.loop.?.tryPostEvent(.{ .button_clicked = .{ .Task = i } });
+                            }
 
-                        self.button_currently_down = .None;
-                    },
-                    else => {},
+                            self.button_currently_down = .None;
+                        },
+                        else => {},
+                    }
                 }
-            }
 
-            // Process tag clicks.
-            if (task_tag_box.hasMouse(self.mouse)) |mouse| {
-                // Use a pointer when hovering tasks.
-                self.vx.setMouseShape(.pointer);
+                // Process tag clicks.
+                if (task_tag_box.hasMouse(self.mouse)) |mouse| {
+                    // Use a pointer when hovering tasks.
+                    self.vx.setMouseShape(.pointer);
 
-                switch (mouse.type) {
-                    .press => if (mouse.button == .left) {
-                        self.button_currently_down = .{ .Tag = i };
-                    },
-                    .release => {
-                        if (self.button_currently_down.eql(.{ .Tag = i })) {
-                            _ = self.loop.?.tryPostEvent(.{ .button_clicked = .{ .Tag = i } });
-                        }
-                        self.button_currently_down = .None;
-                    },
-                    else => {},
+                    switch (mouse.type) {
+                        .press => if (mouse.button == .left) {
+                            self.button_currently_down = .{ .Tag = i };
+                        },
+                        .release => {
+                            if (self.button_currently_down.eql(.{ .Tag = i })) {
+                                _ = self.loop.?.tryPostEvent(.{ .button_clicked = .{ .Tag = i } });
+                            }
+                            self.button_currently_down = .None;
+                        },
+                        else => {},
+                    }
                 }
             }
 
@@ -1478,8 +1761,11 @@ const TodoApp = struct {
                 break :blk .{ .fg = .{ .index = 5 } };
             };
 
-            _ = try task_title_box.printSegment(.{ .text = task.title, .style = style }, .{ .wrap = .word });
-            _ = try task_tag_box.printSegment(.{ .text = task.tags, .style = tag_style }, .{});
+            // Only draw if we've hit the scroll offset.
+            if (y_off -| 3 >= self.scroll_offset) {
+                _ = try task_title_box.printSegment(.{ .text = task.title, .style = style }, .{ .wrap = .word });
+                _ = try task_tag_box.printSegment(.{ .text = task.tags, .style = tag_style }, .{});
+            }
         }
     }
 };
