@@ -284,7 +284,7 @@ const TodoApp = struct {
         };
         defer self.allocator.free(todo_folder_path);
 
-        self.tasks.clearAndFree();
+        self.tasks.clearRetainingCapacity();
         self.tasks = try self.get_tasks_from_dir(todo_folder_path);
 
         // Sort tasks.
