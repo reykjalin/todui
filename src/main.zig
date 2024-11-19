@@ -1771,36 +1771,17 @@ const TodoApp = struct {
 };
 
 fn get_todo_file_storage_path_caller_should_free(allocator: std.mem.Allocator) ![]const u8 {
-    const data_path = try known_folders.getPath(allocator, known_folders.KnownFolder.data);
-    defer {
-        if (data_path) |p| {
-            allocator.free(p);
-        }
-    }
-
-    if (data_path) |p| {
-        return try std.fs.path.join(allocator, &.{ p, "todo" });
-    }
-
-    unreachable;
+    return try std.fs.path.join(allocator, &.{ data_storage_path, "todo" });
 }
 
 fn get_completed_todo_file_storage_path_caller_should_free(allocator: std.mem.Allocator) ![]const u8 {
-    const data_path = try known_folders.getPath(allocator, known_folders.KnownFolder.data);
-    defer {
-        if (data_path) |p| {
-            allocator.free(p);
-        }
-    }
-
-    if (data_path) |p| {
-        return try std.fs.path.join(allocator, &.{ p, "todo", "completed" });
-    }
-
-    unreachable;
+    return try std.fs.path.join(allocator, &.{ data_storage_path, "todo", "completed" });
 }
 
 fn get_todo_app_log_storage_path(allocator: std.mem.Allocator) ![]const u8 {
+    // NOTE: We're not using the global data_storage_path because this function gets called from
+    //       the custom logger function, which can run both before and after the memory in
+    //       data_storage_path is initialized or freed.
     const data_path = try known_folders.getPath(allocator, known_folders.KnownFolder.data);
     defer {
         if (data_path) |p| {
@@ -1890,6 +1871,9 @@ fn log_to_file(comptime message_level: std.log.Level, comptime scope: @TypeOf(.e
     }
 }
 
+/// Global reference to where the data, logs, and config should be stored.
+var data_storage_path: []u8 = undefined;
+
 /// Keep our main function small. Typically handling arg parsing and initialization only
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -1901,6 +1885,45 @@ pub fn main() !void {
         }
     }
     const allocator = gpa.allocator();
+
+    // Process arguments.
+    const args = try std.process.argsAlloc(allocator);
+    defer std.process.argsFree(allocator, args);
+
+    if (args.len > 1 and (std.mem.eql(u8, args[1], "--help") or std.mem.eql(u8, args[1], "-h"))) {
+        const writer = std.io.getStdOut().writer();
+        try writer.print("Usage: todui [storage_folder]\n", .{});
+        try writer.print("\n", .{});
+        try writer.print("Positional options:\n", .{});
+        try writer.print("  [storage_folder]  The path to where todui data should be stored.\n", .{});
+        try writer.print("                    Defaults to ~/.local/share/todo/ when no path is provided.\n", .{});
+        try writer.print("\n", .{});
+        try writer.print("General options:\n", .{});
+        try writer.print("\n", .{});
+        try writer.print("  -h, --help     Print fn help\n", .{});
+        try writer.print("  -v, --version  Print fn help\n", .{});
+        std.process.exit(0);
+    }
+    if (args.len > 1 and (std.mem.eql(u8, args[1], "--version") or std.mem.eql(u8, args[1], "-v"))) {
+        const writer = std.io.getStdOut().writer();
+        try writer.print("2024.11-dev\n", .{});
+        std.process.exit(0);
+    }
+    if (args.len > 1) {
+        const cwd = std.fs.cwd();
+        cwd.makePath(args[args.len - 1]) catch |err| switch (err) {
+            error.PathAlreadyExists => {},
+            else => return err,
+        };
+
+        data_storage_path = try cwd.realpathAlloc(allocator, args[args.len - 1]);
+    } else {
+        const storage_path = (try known_folders.getPath(allocator, known_folders.KnownFolder.data)) orelse unreachable;
+        defer allocator.free(storage_path);
+        data_storage_path = try allocator.alloc(u8, storage_path.len);
+        std.mem.copyForwards(u8, data_storage_path, storage_path);
+    }
+    defer allocator.free(data_storage_path);
 
     // Initialize our application
     var app = try TodoApp.init(allocator);
