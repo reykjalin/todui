@@ -1895,6 +1895,7 @@ pub fn main() !void {
         try writer.print("Usage: todui [storage_folder]\n", .{});
         try writer.print("\n", .{});
         try writer.print("Positional options:\n", .{});
+        try writer.print("\n", .{});
         try writer.print("  [storage_folder]  The path to where todui data should be stored.\n", .{});
         try writer.print("                    Defaults to ~/.local/share/todo/ when no path is provided.\n", .{});
         try writer.print("\n", .{});
