@@ -647,7 +647,7 @@ const TodoApp = struct {
         // FIXME: This doesn't account for text wrapping.
 
         var last_date_str: [10]u8 = undefined;
-        var number_of_dates: usize = 1;
+        var number_of_dates: usize = 0;
 
         // Count the number of different dates.
         for (self.tasks.items) |task| {
