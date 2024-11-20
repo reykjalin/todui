@@ -1,5 +1,10 @@
 # Todui
 
+> **Note**
+>
+> I consider Todui to be mostly feature complete at this point.
+> Future development will be slow and mostly consist of minor quality-of-life improvements or fixing little annoyances and bugs that come up.
+
 A filesystem based TUI app for managing todo lists.
 The [`.todo` file specification](./SPECIFICATION.md) was created to fit this specific implementation.
 
