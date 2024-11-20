@@ -5,7 +5,7 @@ The [`.todo` file specification](./SPECIFICATION.md) was created to fit this spe
 
 The TUI is fully mouse aware so you can use both the keybindings listed below or the mouse to navigate the TUI.
 
-![Todui task list at commit hash `a54d31b889781325677de1901731cd6b5e6b9aed`](./screenshots/task-list-a54d31b889781325677de1901731cd6b5e6b9aed.webp)
+![Todui task list at commit hash `2d2f133904a97292c5ac50917e7ed175fb71a569`](./screenshots/task-list-2d2f133904a97292c5ac50917e7ed175fb71a569.webp)
 
 ## CLI Help
 
@@ -96,6 +96,6 @@ You'll find the built release executable in `./zig-out/bin/todui`.
 
 ## Screenshots
 
-![Todui task list at commit hash `a54d31b889781325677de1901731cd6b5e6b9aed`](./screenshots/task-list-a54d31b889781325677de1901731cd6b5e6b9aed.webp)
-![Todui completed tasks at commit hash `a54d31b889781325677de1901731cd6b5e6b9aed`](./screenshots/completed-tasks-a54d31b889781325677de1901731cd6b5e6b9aed.webp)
-![Todui task details at commit hash `a54d31b889781325677de1901731cd6b5e6b9aed`](./screenshots/task-details-a54d31b889781325677de1901731cd6b5e6b9aed.webp)
+![Todui task list at commit hash `2d2f133904a97292c5ac50917e7ed175fb71a569`](./screenshots/task-list-2d2f133904a97292c5ac50917e7ed175fb71a569.webp)
+![Todui completed tasks at commit hash `2d2f133904a97292c5ac50917e7ed175fb71a569`](./screenshots/completed-tasks-2d2f133904a97292c5ac50917e7ed175fb71a569.webp)
+![Todui task details at commit hash `2d2f133904a97292c5ac50917e7ed175fb71a569`](./screenshots/task-details-2d2f133904a97292c5ac50917e7ed175fb71a569.webp)
