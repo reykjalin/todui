@@ -637,6 +637,12 @@ const TodoApp = struct {
         }
     }
 
+    fn get_available_height_for_tasks(self: *TodoApp) usize {
+        // Window height - 4 because we need to account for the app header.
+        // If the tasks fit within the window, there is no need to scroll.
+        return self.vx.window().height -| 4;
+    }
+
     fn get_completed_tasks_draw_height(self: *TodoApp) !usize {
         // FIXME: This doesn't account for text wrapping.
 
@@ -666,7 +672,7 @@ const TodoApp = struct {
         if (active_layout == .TaskList) {
             // Window height - 4 because we need to account for the app header.
             // If the tasks fit within the window, there is no need to scroll.
-            const active_task_list_height = self.vx.window().height - 4;
+            const active_task_list_height = self.get_available_height_for_tasks();
             if (self.tasks.items.len < active_task_list_height) {
                 return;
             }
@@ -682,7 +688,7 @@ const TodoApp = struct {
         const active_layout = self.active_layout.getLast();
 
         // Window height - 4 because we need to account for the app header.
-        const available_height_for_tasks = self.vx.window().height - 4;
+        const available_height_for_tasks = self.get_available_height_for_tasks();
 
         if (active_layout == .TaskList) {
             // If the tasks fit within the window, there is no need to scroll.
@@ -706,6 +712,48 @@ const TodoApp = struct {
         }
     }
 
+    fn get_selected_task_draw_offset_from_top(self: *TodoApp) !usize {
+        // Only the completed task list adds additional spacing to the view. All other views can
+        // use the index (i.e. location) of the currently selected task.
+        if (self.active_layout.getLast() != .CompletedTasks) return self.selected_active_task;
+
+        // Calculate the offset necessary to get to the selected completed task, where we need to
+        // take into account the space taken by the date headers; 3 rows.
+
+        // FIXME: This doesn't account for text wrapping.
+        var last_date_str: [10]u8 = undefined;
+        var number_of_dates: usize = 0;
+
+        // Count the number of different dates.
+        for (self.tasks.items[0..@min(self.selected_active_task + 1, self.tasks.items.len)]) |task| {
+            const date_str = std.fs.path.stem(task.file_path.items)[0..10];
+            if (!std.mem.eql(u8, date_str, &last_date_str)) {
+                number_of_dates += 1;
+
+                // Update last_date_str.
+                _ = try std.fmt.bufPrint(&last_date_str, "{s}", .{date_str});
+            }
+        }
+
+        // Each new date adds 3 rows, and thus:
+        // draw_height = (3 * number_of_dates) + number_of_tasks.
+        // NOTE: in this case number_of_tasks == self.selected_active_task.
+        // FIXME: We might technically overflow usize here.
+        return (3 * number_of_dates) + self.selected_active_task;
+    }
+
+    fn ensure_selected_task_is_visible(self: *TodoApp) !void {
+        const selected_task_offset = try self.get_selected_task_draw_offset_from_top();
+
+        // If selected task is above the scroll offset fold we need to scroll up.
+        // Else if selected task is below the scroll offset + window height we need to scroll down.
+        if (selected_task_offset < self.scroll_offset) {
+            self.scroll_offset = selected_task_offset;
+        } else if (selected_task_offset > self.scroll_offset + self.get_available_height_for_tasks()) {
+            self.scroll_offset = selected_task_offset -| self.get_available_height_for_tasks();
+        }
+    }
+
     /// Update our application state from an event
     pub fn update(self: *TodoApp, event: Event) !void {
         switch (event) {
@@ -718,28 +766,22 @@ const TodoApp = struct {
                         if (self.active_layout.getLast() != .TaskList) {
                             // Reset scroll.
                             self.scroll_offset = 0;
+                            self.selected_active_task = 0;
 
                             try self.reload_tasks(.ActiveTask);
 
                             try self.active_layout.append(.TaskList);
-
-                            if (self.selected_active_task >= self.tasks.items.len) {
-                                self.selected_active_task = self.tasks.items.len -| 1;
-                            }
                         }
                     },
                     .CompletedTasksButton => {
                         if (self.active_layout.getLast() != .CompletedTasks) {
                             // Reset scroll.
                             self.scroll_offset = 0;
+                            self.selected_active_task = 0;
 
                             try self.reload_tasks(.CompletedTask);
 
                             try self.active_layout.append(.CompletedTasks);
-
-                            if (self.selected_active_task >= self.tasks.items.len) {
-                                self.selected_active_task = self.tasks.items.len -| 1;
-                            }
                         }
                     },
                     .ClearFilterButton => {
@@ -834,28 +876,40 @@ const TodoApp = struct {
                         // Movement
                         if (key.matchesAny(&.{ vaxis.Key.up, 'k' }, .{})) {
                             self.selected_active_task -|= 1;
+
+                            try self.ensure_selected_task_is_visible();
                         }
                         if (key.matchesAny(&.{ vaxis.Key.down, 'j' }, .{})) {
                             if (self.selected_active_task < self.tasks.items.len) {
                                 self.selected_active_task += 1;
+
+                                try self.ensure_selected_task_is_visible();
                             }
                         }
                         if (key.matches('g', .{})) {
                             self.selected_active_task = 0;
+
+                            try self.ensure_selected_task_is_visible();
                         }
                         if (key.matches('G', .{})) {
                             self.selected_active_task = self.tasks.items.len -| 1;
+
+                            try self.ensure_selected_task_is_visible();
                         }
 
                         // Move tasks down.
                         if (key.matches('J', .{}) or key.matches(vaxis.Key.down, .{ .shift = true })) {
                             try self.swap_tasks(self.selected_active_task, self.selected_active_task + 1);
                             self.selected_active_task += 1;
+
+                            try self.ensure_selected_task_is_visible();
                         }
                         // Move tasks up.
                         if (key.matches('K', .{}) or key.matches(vaxis.Key.up, .{ .shift = true })) {
                             try self.swap_tasks(self.selected_active_task, self.selected_active_task -| 1);
                             self.selected_active_task -|= 1;
+
+                            try self.ensure_selected_task_is_visible();
                         }
 
                         // Make sure the active table row never exceeds the number of tasks.
@@ -908,12 +962,7 @@ const TodoApp = struct {
 
                             // Reset scroll.
                             self.scroll_offset = 0;
-
-                            if (self.tasks.items.len == 0) {
-                                self.selected_active_task = 0;
-                            } else if (self.selected_active_task >= self.tasks.items.len) {
-                                self.selected_active_task = self.tasks.items.len - 1;
-                            }
+                            self.selected_active_task = 0;
                         }
                     },
                     .TaskDetails => {
@@ -998,26 +1047,31 @@ const TodoApp = struct {
 
                             // Reset scroll.
                             self.scroll_offset = 0;
-
-                            if (self.selected_active_task >= self.tasks.items.len) {
-                                self.selected_active_task = self.tasks.items.len -| 1;
-                            }
+                            self.selected_active_task = 0;
                         }
 
                         // Movement
                         if (key.matchesAny(&.{ vaxis.Key.up, 'k' }, .{})) {
                             self.selected_active_task -|= 1;
+
+                            try self.ensure_selected_task_is_visible();
                         }
                         if (key.matchesAny(&.{ vaxis.Key.down, 'j' }, .{})) {
                             if (self.selected_active_task < self.tasks.items.len) {
                                 self.selected_active_task += 1;
+
+                                try self.ensure_selected_task_is_visible();
                             }
                         }
                         if (key.matches('g', .{})) {
                             self.selected_active_task = 0;
+
+                            try self.ensure_selected_task_is_visible();
                         }
                         if (key.matches('G', .{})) {
                             self.selected_active_task = self.tasks.items.len -| 1;
+
+                            try self.ensure_selected_task_is_visible();
                         }
 
                         // Make sure the active table row never exceeds the number of tasks.
@@ -1636,12 +1690,12 @@ const TodoApp = struct {
         // Make sure there's space for the scroll-bar.
         const window = self.vx.window().child(.{
             .x_off = 0,
-            .y_off = 0,
+            .y_off = 3,
             .width = .{ .limit = self.vx.window().width - 2 },
             .height = .{ .limit = self.vx.window().height },
         });
 
-        var y_off: usize = 3;
+        var y_off: usize = 0;
         var last_date_str: [10]u8 = undefined;
 
         for (task_list.items, 0..) |task, i| {
@@ -1650,7 +1704,7 @@ const TodoApp = struct {
                 y_off +|= 1;
 
                 // Only draw if we've hit the scroll offset.
-                if (y_off -| 3 >= self.scroll_offset) {
+                if (y_off >= self.scroll_offset) {
                     const task_date_box = window.child(.{
                         .x_off = 0,
                         .y_off = y_off -| self.scroll_offset,
@@ -1697,7 +1751,7 @@ const TodoApp = struct {
             y_off +|= print_result.row + 1;
 
             // Only process clicks if we've hit the scroll offset.
-            if (y_off -| 3 >= self.scroll_offset) {
+            if (y_off >= self.scroll_offset) {
                 // Process clicks.
                 if (task_title_box.hasMouse(self.mouse)) |mouse| {
                     // Use a pointer when hovering tasks.
@@ -1762,7 +1816,7 @@ const TodoApp = struct {
             };
 
             // Only draw if we've hit the scroll offset.
-            if (y_off -| 3 >= self.scroll_offset) {
+            if (y_off >= self.scroll_offset) {
                 _ = try task_title_box.printSegment(.{ .text = task.title, .style = style }, .{ .wrap = .word });
                 _ = try task_tag_box.printSegment(.{ .text = task.tags, .style = tag_style }, .{});
             }
