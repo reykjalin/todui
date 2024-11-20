@@ -18,8 +18,6 @@ If another release is tagged in the same month I would add a patch number, such 
 * You can't scroll by clicking and dragging the scroll bar, or clicking the scroll area.
 * The scrollbar doesn't always scroll all the way down, sometimes there
   is a 1 cell gap between the scrollbar and the scroll down button.
-* Selecting a task to view details or completing it after scrolling will
-  select the wrong task.
 * You can't select and copy text in the details view.
 
 

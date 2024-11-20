@@ -1395,7 +1395,7 @@ const TodoApp = struct {
         });
 
         var y_off: usize = 3;
-        for (self.tasks.items[self.scroll_offset..self.tasks.items.len], 0..) |task, i| {
+        for (self.tasks.items[self.scroll_offset..self.tasks.items.len], self.scroll_offset..) |task, i| {
             // FIXME: Make sure we don't divide by zero.
             var task_title_box = window.child(.{
                 .x_off = 0,
