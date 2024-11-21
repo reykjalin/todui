@@ -12,6 +12,22 @@ The TUI is fully mouse aware so you can use both the keybindings listed below or
 
 ![Todui task list at commit hash `2d2f133904a97292c5ac50917e7ed175fb71a569`](./screenshots/task-list-2d2f133904a97292c5ac50917e7ed175fb71a569.webp)
 
+
+## Installation instructions
+
+### Download binaries
+
+The tags and releases have binaries available for macOS and Linux.
+You can download a pre-built binary for your system from there.
+The binaries are static so you can store them wherever you like and run them from there.
+
+### Build from source
+
+1. Clone this repository or download the source some other way.
+2. Run `zig build -Doptimize=ReleaseSafe --prefix=~/.local` and the `todui` executable will be installed in `~/.local/bin/todui`.
+    * If you build without the `--prefix=~/.local` parameter the binary will be in `./zig-out/bin/todui`. It's static so you can move it wherever you want.
+
+
 ## CLI Help
 
 ```sh
@@ -90,7 +106,7 @@ You could do the same with tags, but in that case the storage is the same for bo
 | <kbd>enter</kbd> | Save filter. Empty filter results in no filtering being applied |
 
 
-## Build instructions
+## Dev build instructions
 
 This app is written in Zig and libvaxis and uses the Zig Build system.
 To build, simply download Zig and run `zig build run`.
@@ -98,6 +114,7 @@ Dependencies will automatically be fetched and built for your system.
 
 To make a release build run `zig build -Doptimize=ReleaseSafe`.
 You'll find the built release executable in `./zig-out/bin/todui`.
+
 
 ## Screenshots
 
