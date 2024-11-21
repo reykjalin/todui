@@ -1961,7 +1961,7 @@ pub fn main() !void {
     }
     if (args.len > 1 and (std.mem.eql(u8, args[1], "--version") or std.mem.eql(u8, args[1], "-v"))) {
         const writer = std.io.getStdOut().writer();
-        try writer.print("2024.11\n", .{});
+        try writer.print("2024.11.2-dev\n", .{});
         std.process.exit(0);
     }
     if (args.len > 1) {

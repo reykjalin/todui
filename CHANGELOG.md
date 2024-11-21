@@ -4,6 +4,22 @@ Version scheme is `<year>.<month>.<patch>`, where the `<patch>` may be unused.
 For example, the first release in a given month will usually be `<year>.<month>`, e.g. `2024.10`.
 If another release is tagged in the same month I would add a patch number, such as `2024.10.1`.
 
+## 2024.11.2-dev
+
+### Features
+
+* 
+
+### Known issues and missing features
+
+* Multiple selections are not a thing yet.
+* The currently active filter is not displayed.
+* You can't scroll by clicking and dragging the scroll bar, or clicking the scroll area.
+* The scrollbar doesn't always scroll all the way down, sometimes there
+  is a 1 cell gap between the scrollbar and the scroll down button.
+* You can't select and copy text in the details view.
+
+
 ## 2024.11
 
 ### Features
