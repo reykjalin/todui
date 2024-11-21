@@ -13,9 +13,7 @@ pub fn build(b: *std.Build) !void {
             .{ .cpu_arch = .aarch64, .os_tag = .linux },
             .{ .cpu_arch = .x86_64, .os_tag = .linux, .abi = .gnu },
             .{ .cpu_arch = .x86_64, .os_tag = .linux, .abi = .musl },
-            // Windows support not available due to a call to self.tty.write().
-            // Re-enable once that has been removed following a libvaxis update.
-            // .{ .cpu_arch = .x86_64, .os_tag = .windows },
+            .{ .cpu_arch = .x86_64, .os_tag = .windows },
         };
 
         // Based on https://ziglang.org/learn/build-system/#release.
