@@ -3,7 +3,64 @@ const std = @import("std");
 // Although this function looks imperative, note that its job is to
 // declaratively construct a build graph that will be executed by an external
 // runner.
-pub fn build(b: *std.Build) void {
+pub fn build(b: *std.Build) !void {
+    const shouldCrossCompile = b.option(bool, "crosscompile", "Build for macOS, Linux, and Windows") orelse false;
+
+    if (shouldCrossCompile) {
+        const targets: []const std.Target.Query = &.{
+            .{ .cpu_arch = .aarch64, .os_tag = .macos },
+            .{ .cpu_arch = .x86_64, .os_tag = .macos },
+            .{ .cpu_arch = .aarch64, .os_tag = .linux },
+            .{ .cpu_arch = .x86_64, .os_tag = .linux, .abi = .gnu },
+            .{ .cpu_arch = .x86_64, .os_tag = .linux, .abi = .musl },
+            // Windows support not available due to a call to self.tty.write().
+            // Re-enable once that has been removed following a libvaxis update.
+            // .{ .cpu_arch = .x86_64, .os_tag = .windows },
+        };
+
+        // Based on https://ziglang.org/learn/build-system/#release.
+        for (targets) |t| {
+            const target = b.resolveTargetQuery(t);
+
+            const vaxis_dep = b.dependency("vaxis", .{
+                .target = target,
+                .optimize = .ReleaseSafe,
+            });
+
+            const known_folders = b.dependency("known-folders", .{
+                .target = target,
+                .optimize = .ReleaseSafe,
+            });
+
+            const zeit_dep = b.dependency("zeit", .{
+                .target = target,
+                .optimize = .ReleaseSafe,
+            });
+
+            const exe = b.addExecutable(.{
+                .name = "todui",
+                .root_source_file = b.path("src/main.zig"),
+                .target = target,
+                .optimize = .ReleaseSafe,
+            });
+            exe.root_module.addImport("vaxis", vaxis_dep.module("vaxis"));
+            exe.root_module.addImport("known-folders", known_folders.module("known-folders"));
+            exe.root_module.addImport("zeit", zeit_dep.module("zeit"));
+
+            const target_output = b.addInstallArtifact(exe, .{
+                .dest_dir = .{
+                    .override = .{
+                        .custom = try t.zigTriple(b.allocator),
+                    },
+                },
+            });
+
+            b.getInstallStep().dependOn(&target_output.step);
+        }
+
+        return;
+    }
+
     // Standard target options allows the person running `zig build` to choose
     // what target to build for. Here we do not override the defaults, which
     // means any target is allowed, and the default is native. Other options
