@@ -17,7 +17,7 @@ The TUI is fully mouse aware so you can use both the keybindings listed below or
 
 ### Download binaries
 
-The tags and releases have binaries available for macOS and Linux.
+The tags and releases have binaries available for macOS (arm64 and x86_64), Linux (arm64 and x86_64), and Windows (x86_64).
 You can download a pre-built binary for your system from there.
 The binaries are static so you can store them wherever you like and run them from there.
 
