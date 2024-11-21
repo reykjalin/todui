@@ -25,8 +25,8 @@ Positional options:
 
 General options:
 
-  -h, --help     Print fn help
-  -v, --version  Print fn help
+  -h, --help     Print todui help
+  -v, --version  Print todui version
 ```
 
 The `storage_folder` positional argument can be used to change where tasks are stored.

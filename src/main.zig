@@ -1955,13 +1955,13 @@ pub fn main() !void {
         try writer.print("\n", .{});
         try writer.print("General options:\n", .{});
         try writer.print("\n", .{});
-        try writer.print("  -h, --help     Print fn help\n", .{});
-        try writer.print("  -v, --version  Print fn help\n", .{});
+        try writer.print("  -h, --help     Print todui help\n", .{});
+        try writer.print("  -v, --version  Print todui version\n", .{});
         std.process.exit(0);
     }
     if (args.len > 1 and (std.mem.eql(u8, args[1], "--version") or std.mem.eql(u8, args[1], "-v"))) {
         const writer = std.io.getStdOut().writer();
-        try writer.print("2024.11-dev\n", .{});
+        try writer.print("2024.11\n", .{});
         std.process.exit(0);
     }
     if (args.len > 1) {
