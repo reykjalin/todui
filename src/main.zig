@@ -447,9 +447,6 @@ const TodoApp = struct {
 
     fn edit_file_path(self: *TodoApp, file_path: []const u8) !void {
         // Reset terminal state.
-        // vx.resetState doesn't show the cursor at the moment (which is a bug), so
-        // we do it manually for now. A fix should be included in a future version of libvaxis.
-        _ = try self.tty.write(vaxis.ctlseqs.show_cursor);
         _ = try self.vx.resetState(self.tty.anyWriter());
 
         // Halt the event loop.
